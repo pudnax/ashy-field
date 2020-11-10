@@ -12,7 +12,7 @@ fn main() -> Result<()> {
     color_eyre::install()?;
     let eventloop = EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
-    let aetna = Aetna::init(window)?;
+    let mut aetna = Aetna::init(window)?;
     eventloop.run(move |event, _, controlflow| match event {
         Event::WindowEvent { ref event, .. } => match event {
             WindowEvent::CloseRequested
@@ -31,11 +31,74 @@ fn main() -> Result<()> {
         },
 
         Event::MainEventsCleared => {
-            // doing the work here (later)
             aetna.window.request_redraw();
         }
         Event::RedrawRequested(_) => {
-            //render here (later)
+            let (image_index, _) = unsafe {
+                aetna
+                    .swapchain
+                    .swapchain_loader
+                    .acquire_next_image(
+                        aetna.swapchain.swapchain,
+                        std::u64::MAX,
+                        aetna.swapchain.image_available[aetna.swapchain.current_image],
+                        vk::Fence::null(),
+                    )
+                    .expect("image acquisition trouble")
+            };
+            unsafe {
+                aetna
+                    .device
+                    .wait_for_fences(
+                        &[aetna.swapchain.may_begin_drawing[aetna.swapchain.current_image]],
+                        true,
+                        std::u64::MAX,
+                    )
+                    .expect("fence-waiting");
+                aetna
+                    .device
+                    .reset_fences(&[
+                        aetna.swapchain.may_begin_drawing[aetna.swapchain.current_image]
+                    ])
+                    .expect("resetting fences");
+            }
+            let semaphores_available =
+                [aetna.swapchain.image_available[aetna.swapchain.current_image]];
+            let waiting_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+            let semaphores_finished =
+                [aetna.swapchain.rendering_finished[aetna.swapchain.current_image]];
+            let commandbuffers = [aetna.commandbuffers[image_index as usize]];
+            let submit_info = [vk::SubmitInfo::builder()
+                .wait_semaphores(&semaphores_available)
+                .wait_dst_stage_mask(&waiting_stages)
+                .command_buffers(&commandbuffers)
+                .signal_semaphores(&semaphores_finished)
+                .build()];
+            unsafe {
+                aetna
+                    .device
+                    .queue_submit(
+                        aetna.queues.graphics_queue,
+                        &submit_info,
+                        aetna.swapchain.may_begin_drawing[aetna.swapchain.current_image],
+                    )
+                    .expect("queue submission");
+            };
+            let swapchains = [aetna.swapchain.swapchain];
+            let indices = [image_index];
+            let present_info = vk::PresentInfoKHR::builder()
+                .wait_semaphores(&semaphores_finished)
+                .swapchains(&swapchains)
+                .image_indices(&indices);
+            unsafe {
+                aetna
+                    .swapchain
+                    .swapchain_loader
+                    .queue_present(aetna.queues.graphics_queue, &present_info)
+                    .expect("queue presentation");
+            };
+            aetna.swapchain.current_image =
+                (aetna.swapchain.current_image + 1) % aetna.swapchain.amount_of_images as usize;
         }
         _ => {}
     });
@@ -67,7 +130,6 @@ fn init_instance(
         .map_err(|e| eyre!("Failed to create CStr from: {}", e))?;
     let appname =
         CString::new("The Black Window").map_err(|e| eyre!("Failed to create CStr from: {}", e))?;
-    dbg!(&appname);
     let app_info = vk::ApplicationInfo::builder()
         .application_name(&appname)
         .application_version(vk::make_version(0, 0, 1))
@@ -91,7 +153,7 @@ fn init_instance(
     let mut debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
         .message_severity(
             vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                // | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
                 | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
         )
         .message_type(
@@ -119,7 +181,7 @@ impl DebugDongXi {
         let debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(
                 vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                    // | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
                     | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
                     | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
             )
@@ -324,6 +386,11 @@ struct SwapchainDongXi {
     framebuffers: Vec<vk::Framebuffer>,
     surface_format: vk::SurfaceFormatKHR,
     extent: vk::Extent2D,
+    image_available: Vec<vk::Semaphore>,
+    rendering_finished: Vec<vk::Semaphore>,
+    may_begin_drawing: Vec<vk::Fence>,
+    amount_of_images: u32,
+    current_image: usize,
 }
 
 impl SwapchainDongXi {
@@ -359,6 +426,7 @@ impl SwapchainDongXi {
         let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, logical_device);
         let swapchain = unsafe { swapchain_loader.create_swapchain(&swapchain_create_info, None)? };
         let swapchain_images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
+        let amount_of_images = swapchain_images.len() as u32;
         let mut swapchain_imageviews = Vec::with_capacity(swapchain_images.len());
         for image in &swapchain_images {
             let subresource_range = vk::ImageSubresourceRange::builder()
@@ -376,6 +444,21 @@ impl SwapchainDongXi {
                 unsafe { logical_device.create_image_view(&imageview_create_info, None) }?;
             swapchain_imageviews.push(imageview);
         }
+        let mut image_available = vec![];
+        let mut rendering_finished = vec![];
+        let mut may_begin_drawing = vec![];
+        let semaphoreinfo = vk::SemaphoreCreateInfo::builder();
+        let fenceinfo = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+        for _ in 0..amount_of_images {
+            let semaphore_available =
+                unsafe { logical_device.create_semaphore(&semaphoreinfo, None) }?;
+            let semaphore_finished =
+                unsafe { logical_device.create_semaphore(&semaphoreinfo, None) }?;
+            image_available.push(semaphore_available);
+            rendering_finished.push(semaphore_finished);
+            let fence = unsafe { logical_device.create_fence(&fenceinfo, None) }?;
+            may_begin_drawing.push(fence);
+        }
         Ok(SwapchainDongXi {
             swapchain_loader,
             swapchain,
@@ -384,9 +467,23 @@ impl SwapchainDongXi {
             framebuffers: vec![],
             surface_format,
             extent,
+            amount_of_images,
+            current_image: 0,
+            image_available,
+            rendering_finished,
+            may_begin_drawing,
         })
     }
     unsafe fn cleanup(&mut self, logical_device: &ash::Device) {
+        for fence in &self.may_begin_drawing {
+            logical_device.destroy_fence(*fence, None);
+        }
+        for semaphore in &self.image_available {
+            logical_device.destroy_semaphore(*semaphore, None);
+        }
+        for semaphore in &self.rendering_finished {
+            logical_device.destroy_semaphore(*semaphore, None);
+        }
         for fb in &self.framebuffers {
             logical_device.destroy_framebuffer(*fb, None);
         }
@@ -604,11 +701,11 @@ impl Pools {
 fn create_commandbuffers(
     logical_device: &ash::Device,
     pools: &Pools,
-    amount: usize,
+    amount: u32,
 ) -> Result<Vec<vk::CommandBuffer>, vk::Result> {
     let commandbuf_allocate_info = vk::CommandBufferAllocateInfo::builder()
         .command_pool(pools.commandpool_graphics)
-        .command_buffer_count(amount as u32);
+        .command_buffer_count(amount);
     unsafe { logical_device.allocate_command_buffers(&commandbuf_allocate_info) }
 }
 
@@ -708,12 +805,12 @@ impl Aetna {
             physical_device,
             swapchain.surface_format.format,
         )?;
-
+        swapchain.create_framebuffers(&logical_device, renderpass)?;
         let pipeline = Pipeline::init(&logical_device, &swapchain, &renderpass)?;
 
         let pools = Pools::init(&logical_device, &queue_families)?;
         let commandbuffers =
-            create_commandbuffers(&logical_device, &pools, swapchain.framebuffers.len())?;
+            create_commandbuffers(&logical_device, &pools, swapchain.amount_of_images)?;
         fill_commandbuffers(
             &commandbuffers,
             &logical_device,
@@ -746,6 +843,9 @@ impl Aetna {
 impl Drop for Aetna {
     fn drop(&mut self) {
         unsafe {
+            self.device
+                .device_wait_idle()
+                .expect("Something went wrong while waiting.");
             self.pools.cleanup(&self.device);
             self.pipeline.cleanup(&self.device);
             self.device.destroy_render_pass(self.renderpass, None);
