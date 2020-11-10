@@ -1,22 +1,32 @@
 use ash::{version::DeviceV1_0, version::EntryV1_0, version::InstanceV1_0, vk};
 use eyre::*;
 use std::ffi::{c_void, CStr, CString};
+use winit::{
+    event::*,
+    event_loop::{ControlFlow, EventLoop},
+};
 
 mod utils;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    let eventloop = winit::event_loop::EventLoop::new();
+    let eventloop = EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
     let aetna = Aetna::init(window)?;
-    use winit::event::{Event, WindowEvent};
     eventloop.run(move |event, _, controlflow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => {
-            *controlflow = winit::event_loop::ControlFlow::Exit;
-        }
+        Event::WindowEvent { event, .. } => match event {
+            WindowEvent::CloseRequested
+            | WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    },
+                ..
+            } => *controlflow = ControlFlow::Exit,
+            _ => {}
+        },
         Event::MainEventsCleared => {
             // doing the work here (later)
             aetna.window.request_redraw();
@@ -76,9 +86,9 @@ fn init_instance(
         .collect();
     let mut debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
         .message_severity(
-            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+            // vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+            //     | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+            vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
         )
         .message_type(
             vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
@@ -105,8 +115,8 @@ impl DebugDongXi {
         let debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(
                 vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-                    | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+                    // | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                    // | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
                     | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
             )
             .message_type(
@@ -571,7 +581,7 @@ struct Aetna {
     device: ash::Device,
     swapchain: SwapchainDongXi,
     renderpass: vk::RenderPass,
-    // pipeline: vk::Pipeline,
+    pipeline: Pipeline,
 }
 
 impl Aetna {
@@ -607,7 +617,7 @@ impl Aetna {
             swapchain.surface_format.format,
         )?;
 
-        // let pipeline = Pipeline::init(&logical_device, &swapchain, &renderpass)?;
+        let pipeline = Pipeline::init(&logical_device, &swapchain, &renderpass)?;
 
         swapchain.create_framebuffers(&logical_device, renderpass)?;
         Ok(Aetna {
@@ -623,7 +633,7 @@ impl Aetna {
             device: logical_device,
             swapchain,
             renderpass,
-            // pipeline,
+            pipeline,
         })
     }
 }
@@ -631,7 +641,7 @@ impl Aetna {
 impl Drop for Aetna {
     fn drop(&mut self) {
         unsafe {
-            // self.pipeline.cleanup(&self.device);
+            self.pipeline.cleanup(&self.device);
             self.device.destroy_render_pass(self.renderpass, None);
             self.swapchain.cleanup(&self.device);
             self.device.destroy_device(None);
