@@ -2,6 +2,8 @@ use ash::{version::DeviceV1_0, version::EntryV1_0, version::InstanceV1_0, vk};
 use eyre::*;
 use std::ffi::{c_void, CStr, CString};
 
+mod utils;
+
 fn main() -> Result<()> {
     color_eyre::install()?;
     let eventloop = winit::event_loop::EventLoop::new();
@@ -459,12 +461,12 @@ impl Pipeline {
         swapchain: &SwapchainDongXi,
         renderpass: &vk::RenderPass,
     ) -> Result<Pipeline, vk::Result> {
-        let vertexshader_createinfo = vk::ShaderModuleCreateInfo::builder()
-            .code(vk_shader_macros::include_glsl!("./shaders/shader.vert"));
+        let vs_src = include_spirv_from_outdir!("/shaders/shader.vert.spv");
+        let vertexshader_createinfo = vk::ShaderModuleCreateInfo::builder().code(&vs_src);
         let vertexshader_module =
             unsafe { logical_device.create_shader_module(&vertexshader_createinfo, None)? };
-        let fragmentshader_createinfo = vk::ShaderModuleCreateInfo::builder()
-            .code(vk_shader_macros::include_glsl!("./shaders/shader.frag"));
+        let fs_src = include_spirv_from_outdir!("/shaders/shader.frag.spv");
+        let fragmentshader_createinfo = vk::ShaderModuleCreateInfo::builder().code(&fs_src);
         let fragmentshader_module =
             unsafe { logical_device.create_shader_module(&fragmentshader_createinfo, None)? };
         let mainfunctionname = std::ffi::CString::new("main").unwrap();
@@ -569,7 +571,7 @@ struct Aetna {
     device: ash::Device,
     swapchain: SwapchainDongXi,
     renderpass: vk::RenderPass,
-    pipeline: vk::Pipeline,
+    // pipeline: vk::Pipeline,
 }
 
 impl Aetna {
@@ -605,7 +607,7 @@ impl Aetna {
             swapchain.surface_format.format,
         )?;
 
-        let pipeline = Pipeline::init(&logical_device, &swapchain, &renderpass)?;
+        // let pipeline = Pipeline::init(&logical_device, &swapchain, &renderpass)?;
 
         swapchain.create_framebuffers(&logical_device, renderpass)?;
         Ok(Aetna {
@@ -621,7 +623,7 @@ impl Aetna {
             device: logical_device,
             swapchain,
             renderpass,
-            pipeline,
+            // pipeline,
         })
     }
 }
@@ -629,7 +631,7 @@ impl Aetna {
 impl Drop for Aetna {
     fn drop(&mut self) {
         unsafe {
-            self.pipeline.cleanup(&self.device);
+            // self.pipeline.cleanup(&self.device);
             self.device.destroy_render_pass(self.renderpass, None);
             self.swapchain.cleanup(&self.device);
             self.device.destroy_device(None);
