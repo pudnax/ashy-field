@@ -1,6 +1,6 @@
 use ash::{version::DeviceV1_0, version::EntryV1_0, version::InstanceV1_0, vk};
 use eyre::*;
-use std::ffi::CStr;
+use std::ffi::{c_void, CStr, CString};
 
 fn main() -> Result<()> {
     color_eyre::install()?;
@@ -30,9 +30,9 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     message_type: vk::DebugUtilsMessageTypeFlagsEXT,
     p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-    _p_user_data: *mut std::ffi::c_void,
+    _p_user_data: *mut c_void,
 ) -> vk::Bool32 {
-    let message = std::ffi::CStr::from_ptr((*p_callback_data).p_message);
+    let message = CStr::from_ptr((*p_callback_data).p_message);
     let severity = format!("{:?}", message_severity).to_lowercase();
     let ty = format!("{:?}", message_type).to_lowercase();
     println!("[Debug][{}][{}] {:?}", severity, ty, message);
@@ -48,23 +48,21 @@ fn init_instance(
         Some(version) => version,
         None => vk::make_version(1, 0, 0),
     };
-    let enginename = std::ffi::CString::new("UnknownGameEngine")
+    let enginename = CString::new("UnknownGameEngine")
         .map_err(|e| eyre!("Failed to create CStr from: {}", e))?;
-    let appname = std::ffi::CString::new("The Black Window")
-        .map_err(|e| eyre!("Failed to create CStr from: {}", e))?;
+    let appname =
+        CString::new("The Black Window").map_err(|e| eyre!("Failed to create CStr from: {}", e))?;
     let app_info = vk::ApplicationInfo::builder()
         .application_name(&appname)
         .application_version(vk::make_version(0, 0, 1))
         .engine_name(&enginename)
         .engine_version(vk::make_version(0, 42, 0))
         .api_version(api_version);
-    let layer_names_c: Result<Vec<std::ffi::CString>> = layer_names
+    let layer_names_c: Vec<CString> = layer_names
         .iter()
-        .map(|&ln| {
-            std::ffi::CString::new(ln).map_err(|e| eyre!("Failed to create CString from: {}", e))
-        })
+        .map(|&ln| CString::new(ln).unwrap())
         .collect();
-    let layer_name_pointers: Vec<*const i8> = layer_names_c?
+    let layer_name_pointers: Vec<*const i8> = layer_names_c
         .iter()
         .map(|layer_name| layer_name.as_ptr())
         .collect();
@@ -77,7 +75,7 @@ fn init_instance(
     let mut debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
         .message_severity(
             vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                // | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
                 | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
         )
         .message_type(
@@ -261,11 +259,9 @@ fn init_device_and_queues(
     queue_families: &QueueFamilies,
     layer_names: &[&str],
 ) -> Result<(ash::Device, Queues)> {
-    let layer_names_c: Result<Vec<std::ffi::CString>> = layer_names
+    let layer_names_c: Result<Vec<CString>> = layer_names
         .iter()
-        .map(|&ln| {
-            std::ffi::CString::new(ln).map_err(|e| eyre!("Failed to create CString from: {}", e))
-        })
+        .map(|&ln| CString::new(ln).map_err(|e| eyre!("Failed to create CString from: {}", e)))
         .collect();
     let layer_name_pointers: Vec<*const i8> = layer_names_c?
         .iter()
