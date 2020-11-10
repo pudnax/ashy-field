@@ -1,9 +1,9 @@
-use ash::version::DeviceV1_0;
-use ash::version::EntryV1_0;
-use ash::version::InstanceV1_0;
-use ash::vk;
+use ash::{version::DeviceV1_0, version::EntryV1_0, version::InstanceV1_0, vk};
+use eyre::*;
+use std::ffi::CStr;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
+    color_eyre::install()?;
     let eventloop = winit::event_loop::EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
     let aetna = Aetna::init(window)?;
@@ -42,32 +42,42 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
 fn init_instance(
     entry: &ash::Entry,
     layer_names: &[&str],
-) -> Result<ash::Instance, ash::InstanceError> {
-    let enginename = std::ffi::CString::new("UnknownGameEngine").unwrap();
-    let appname = std::ffi::CString::new("The Black Window").unwrap();
+    extension_names: &[&CStr],
+) -> Result<ash::Instance> {
+    let api_version = match entry.try_enumerate_instance_version()? {
+        Some(version) => version,
+        None => vk::make_version(1, 0, 0),
+    };
+    let enginename = std::ffi::CString::new("UnknownGameEngine")
+        .map_err(|e| eyre!("Failed to create CStr from: {}", e))?;
+    let appname = std::ffi::CString::new("The Black Window")
+        .map_err(|e| eyre!("Failed to create CStr from: {}", e))?;
     let app_info = vk::ApplicationInfo::builder()
         .application_name(&appname)
         .application_version(vk::make_version(0, 0, 1))
         .engine_name(&enginename)
         .engine_version(vk::make_version(0, 42, 0))
-        .api_version(vk::make_version(1, 0, 106));
-    let layer_names_c: Vec<std::ffi::CString> = layer_names
+        .api_version(api_version);
+    let layer_names_c: Result<Vec<std::ffi::CString>> = layer_names
         .iter()
-        .map(|&ln| std::ffi::CString::new(ln).unwrap())
+        .map(|&ln| {
+            std::ffi::CString::new(ln).map_err(|e| eyre!("Failed to create CString from: {}", e))
+        })
         .collect();
-    let layer_name_pointers: Vec<*const i8> = layer_names_c
+    let layer_name_pointers: Vec<*const i8> = layer_names_c?
         .iter()
         .map(|layer_name| layer_name.as_ptr())
         .collect();
-    let extension_name_pointers: Vec<*const i8> = vec![
-        ash::extensions::ext::DebugUtils::name().as_ptr(),
-        ash::extensions::khr::Surface::name().as_ptr(),
-        ash::extensions::khr::XlibSurface::name().as_ptr(),
-    ];
+    let extension_name_pointers: Vec<*const i8> = extension_names
+        .iter()
+        .copied()
+        .chain(vec![ash::extensions::ext::DebugUtils::name()])
+        .map(|s| s.as_ptr())
+        .collect();
     let mut debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
         .message_severity(
             vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                // | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
                 | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
         )
         .message_type(
@@ -83,6 +93,7 @@ fn init_instance(
         .enabled_layer_names(&layer_name_pointers)
         .enabled_extension_names(&extension_name_pointers);
     unsafe { entry.create_instance(&instance_create_info, None) }
+        .wrap_err_with(|| "Failed to create instance")
 }
 
 struct DebugDongXi {
@@ -91,7 +102,7 @@ struct DebugDongXi {
 }
 impl DebugDongXi {
     fn init(entry: &ash::Entry, instance: &ash::Instance) -> Result<DebugDongXi, vk::Result> {
-        let mut debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+        let debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(
                 vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
                     | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
@@ -122,7 +133,6 @@ impl Drop for DebugDongXi {
 }
 
 struct SurfaceDongXi {
-    xlib_surface_loader: ash::extensions::khr::XlibSurface,
     surface: vk::SurfaceKHR,
     surface_loader: ash::extensions::khr::Surface,
 }
@@ -133,17 +143,9 @@ impl SurfaceDongXi {
         entry: &ash::Entry,
         instance: &ash::Instance,
     ) -> Result<SurfaceDongXi, vk::Result> {
-        use winit::platform::unix::WindowExtUnix;
-        let x11_display = window.xlib_display().unwrap();
-        let x11_window = window.xlib_window().unwrap();
-        let x11_create_info = vk::XlibSurfaceCreateInfoKHR::builder()
-            .window(x11_window)
-            .dpy(x11_display as *mut vk::Display);
-        let xlib_surface_loader = ash::extensions::khr::XlibSurface::new(entry, instance);
-        let surface = unsafe { xlib_surface_loader.create_xlib_surface(&x11_create_info, None) }?;
+        let surface = unsafe { ash_window::create_surface(entry, instance, window, None)? };
         let surface_loader = ash::extensions::khr::Surface::new(entry, instance);
         Ok(SurfaceDongXi {
-            xlib_surface_loader,
             surface,
             surface_loader,
         })
@@ -209,7 +211,7 @@ fn init_physical_device_and_properties(
             chosen = Some((p, properties));
         }
     }
-    Ok(chosen.unwrap())
+    chosen.ok_or(vk::Result::ERROR_UNKNOWN)
 }
 
 struct QueueFamilies {
@@ -233,12 +235,12 @@ impl QueueFamilies {
             {
                 found_graphics_q_index = Some(index as u32);
             }
-            if qfam.queue_count > 0 && qfam.queue_flags.contains(vk::QueueFlags::TRANSFER) {
-                if found_transfer_q_index.is_none()
-                    || !qfam.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-                {
-                    found_transfer_q_index = Some(index as u32);
-                }
+            if qfam.queue_count > 0
+                && qfam.queue_flags.contains(vk::QueueFlags::TRANSFER)
+                && (found_transfer_q_index.is_none()
+                    || !qfam.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+            {
+                found_transfer_q_index = Some(index as u32);
             }
         }
         Ok(QueueFamilies {
@@ -258,12 +260,14 @@ fn init_device_and_queues(
     physical_device: vk::PhysicalDevice,
     queue_families: &QueueFamilies,
     layer_names: &[&str],
-) -> Result<(ash::Device, Queues), vk::Result> {
-    let layer_names_c: Vec<std::ffi::CString> = layer_names
+) -> Result<(ash::Device, Queues)> {
+    let layer_names_c: Result<Vec<std::ffi::CString>> = layer_names
         .iter()
-        .map(|&ln| std::ffi::CString::new(ln).unwrap())
+        .map(|&ln| {
+            std::ffi::CString::new(ln).map_err(|e| eyre!("Failed to create CString from: {}", e))
+        })
         .collect();
-    let layer_name_pointers: Vec<*const i8> = layer_names_c
+    let layer_name_pointers: Vec<*const i8> = layer_names_c?
         .iter()
         .map(|layer_name| layer_name.as_ptr())
         .collect();
@@ -387,11 +391,12 @@ struct Aetna {
 }
 
 impl Aetna {
-    fn init(window: winit::window::Window) -> Result<Aetna, Box<dyn std::error::Error>> {
+    fn init(window: winit::window::Window) -> Result<Aetna> {
         let entry = ash::Entry::new()?;
+        let extension_names = ash_window::enumerate_required_extensions(&window)?;
 
         let layer_names = vec!["VK_LAYER_KHRONOS_validation"];
-        let instance = init_instance(&entry, &layer_names)?;
+        let instance = init_instance(&entry, &layer_names, &extension_names)?;
         let debug = DebugDongXi::init(&entry, &instance)?;
         let surfaces = SurfaceDongXi::init(&window, &entry, &instance)?;
 
