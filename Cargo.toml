@@ -17,3 +17,10 @@ winit = "0.23.0"
 eyre = "0.6.2"
 color-eyre = "0.5.7"
 vk-shader-macros = "0.2.6"
+
+[build-dependencies]
+eyre = "0.6.2"
+fs_extra = "1.2"
+glob = "0.3"
+rayon = "1.4"
+shaderc = "0.6"
