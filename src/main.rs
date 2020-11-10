@@ -259,11 +259,11 @@ fn init_device_and_queues(
     queue_families: &QueueFamilies,
     layer_names: &[&str],
 ) -> Result<(ash::Device, Queues)> {
-    let layer_names_c: Result<Vec<CString>> = layer_names
+    let layer_names_c: Vec<CString> = layer_names
         .iter()
-        .map(|&ln| CString::new(ln).map_err(|e| eyre!("Failed to create CString from: {}", e)))
+        .map(|&ln| CString::new(ln).unwrap())
         .collect();
-    let layer_name_pointers: Vec<*const i8> = layer_names_c?
+    let layer_name_pointers: Vec<*const i8> = layer_names_c
         .iter()
         .map(|layer_name| layer_name.as_ptr())
         .collect();
