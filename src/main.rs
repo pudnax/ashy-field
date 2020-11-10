@@ -1,22 +1,35 @@
 use ash::{version::DeviceV1_0, version::EntryV1_0, version::InstanceV1_0, vk};
 use eyre::*;
 use std::ffi::{c_void, CStr, CString};
+use winit::{
+    event::*,
+    event_loop::{ControlFlow, EventLoop},
+};
 
 mod utils;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    let eventloop = winit::event_loop::EventLoop::new();
+    let eventloop = EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
     let aetna = Aetna::init(window)?;
-    use winit::event::{Event, WindowEvent};
     eventloop.run(move |event, _, controlflow| match event {
-        Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } => {
-            *controlflow = winit::event_loop::ControlFlow::Exit;
-        }
+        Event::WindowEvent { ref event, .. } => match event {
+            WindowEvent::CloseRequested
+            | WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        virtual_keycode: Some(VirtualKeyCode::Escape),
+                        ..
+                    },
+                ..
+            } => {
+                *controlflow = ControlFlow::Exit;
+            }
+            _ => {}
+        },
+
         Event::MainEventsCleared => {
             // doing the work here (later)
             aetna.window.request_redraw();
