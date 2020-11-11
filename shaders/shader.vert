@@ -7,6 +7,6 @@ vec4 positions[3] = vec4[](
 );
 
 void main() {
-	gl_PointSize = 2.0;
+	gl_PointSize = 10.0;
     gl_Position = positions[gl_VertexIndex];
 }
