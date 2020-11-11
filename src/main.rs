@@ -488,6 +488,25 @@ impl SwapchainDongXi {
         })
     }
 
+    fn create_framebuffers(
+        &mut self,
+        logical_device: &ash::Device,
+        renderpass: vk::RenderPass,
+    ) -> Result<(), vk::Result> {
+        for iv in &self.imageviews {
+            let iview = [*iv];
+            let framebuffer_info = vk::FramebufferCreateInfo::builder()
+                .render_pass(renderpass)
+                .attachments(&iview)
+                .width(self.extent.width)
+                .height(self.extent.height)
+                .layers(1);
+            let fb = unsafe { logical_device.create_framebuffer(&framebuffer_info, None) }?;
+            self.framebuffers.push(fb);
+        }
+        Ok(())
+    }
+
     unsafe fn cleanup(&mut self, logical_device: &ash::Device) {
         for fence in &self.may_begin_drawing {
             logical_device.destroy_fence(*fence, None);
@@ -506,25 +525,6 @@ impl SwapchainDongXi {
         }
         self.swapchain_loader
             .destroy_swapchain(self.swapchain, None)
-    }
-
-    fn create_framebuffers(
-        &mut self,
-        logical_device: &ash::Device,
-        renderpass: vk::RenderPass,
-    ) -> Result<(), vk::Result> {
-        for iv in &self.imageviews {
-            let iview = [*iv];
-            let framebuffer_info = vk::FramebufferCreateInfo::builder()
-                .render_pass(renderpass)
-                .attachments(&iview)
-                .width(self.extent.width)
-                .height(self.extent.height)
-                .layers(1);
-            let fb = unsafe { logical_device.create_framebuffer(&framebuffer_info, None) }?;
-            self.framebuffers.push(fb);
-        }
-        Ok(())
     }
 }
 
@@ -599,6 +599,7 @@ impl Pipeline {
             unsafe { logical_device.create_shader_module(&fragmentshader_createinfo, None)? };
 
         let mainfunctionname = std::ffi::CString::new("main").unwrap();
+
         let vertexshader_stage = vk::PipelineShaderStageCreateInfo::builder()
             .stage(vk::ShaderStageFlags::VERTEX)
             .module(vertexshader_module)
@@ -609,7 +610,41 @@ impl Pipeline {
             .name(&mainfunctionname);
 
         let shader_stages = vec![vertexshader_stage.build(), fragmentshader_stage.build()];
-        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder();
+        let vertex_attrib_descs = [
+            vk::VertexInputAttributeDescription {
+                binding: 0,
+                location: 0,
+                offset: 0,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 1,
+                offset: 0,
+                format: vk::Format::R32_SFLOAT,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 2,
+                offset: 4,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+            },
+        ];
+        let vertex_binding_descs = [
+            vk::VertexInputBindingDescription {
+                binding: 0,
+                stride: 16,
+                input_rate: vk::VertexInputRate::VERTEX,
+            },
+            vk::VertexInputBindingDescription {
+                binding: 1,
+                stride: 20,
+                input_rate: vk::VertexInputRate::VERTEX,
+            },
+        ];
+        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
+            .vertex_attribute_descriptions(&vertex_attrib_descs)
+            .vertex_binding_descriptions(&vertex_binding_descs);
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
             .topology(vk::PrimitiveTopology::POINT_LIST);
         let viewports = [vk::Viewport {
@@ -742,6 +777,8 @@ fn fill_commandbuffers(
     renderpass: &vk::RenderPass,
     swapchain: &SwapchainDongXi,
     pipeline: &Pipeline,
+    vb1: &vk::Buffer,
+    vb2: &vk::Buffer,
 ) -> Result<(), vk::Result> {
     for (i, &commandbuffer) in commandbuffers.iter().enumerate() {
         let commandbuffer_begininfo = vk::CommandBufferBeginInfo::builder();
@@ -773,12 +810,57 @@ fn fill_commandbuffers(
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.pipeline,
             );
-            logical_device.cmd_draw(commandbuffer, 1, 1, 0, 0);
+            logical_device.cmd_bind_vertex_buffers(commandbuffer, 0, &[*vb1], &[0]);
+            logical_device.cmd_bind_vertex_buffers(commandbuffer, 1, &[*vb2], &[0]);
+            logical_device.cmd_draw(commandbuffer, 3, 1, 0, 0);
             logical_device.cmd_end_render_pass(commandbuffer);
             logical_device.end_command_buffer(commandbuffer)?;
         }
     }
     Ok(())
+}
+
+struct Buffer {
+    buffer: vk::Buffer,
+    allocation: vk_mem::Allocation,
+    allocation_info: vk_mem::AllocationInfo,
+}
+
+impl Buffer {
+    fn new(
+        allocator: &vk_mem::Allocator,
+        size_in_bytes: u64,
+        usage: vk::BufferUsageFlags,
+        memory_usage: vk_mem::MemoryUsage,
+    ) -> Result<Buffer, vk_mem::error::Error> {
+        let allocation_create_info = vk_mem::AllocationCreateInfo {
+            usage: memory_usage,
+            ..Default::default()
+        };
+        let (buffer, allocation, allocation_info) = allocator.create_buffer(
+            &ash::vk::BufferCreateInfo::builder()
+                .size(size_in_bytes)
+                .usage(usage)
+                .build(),
+            &allocation_create_info,
+        )?;
+        Ok(Buffer {
+            buffer,
+            allocation,
+            allocation_info,
+        })
+    }
+
+    fn fill<T: Sized>(
+        &self,
+        allocator: &vk_mem::Allocator,
+        data: &[T],
+    ) -> Result<(), vk_mem::error::Error> {
+        let data_ptr = allocator.map_memory(&self.allocation)? as *mut T;
+        unsafe { data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
+        allocator.unmap_memory(&self.allocation)?;
+        Ok(())
+    }
 }
 
 // TODO: Rethink about the order of poles in the struct for 'right' drop order
@@ -799,6 +881,8 @@ struct Aetna {
     pipeline: Pipeline,
     pools: Pools,
     commandbuffers: Vec<vk::CommandBuffer>,
+    allocator: vk_mem::Allocator,
+    buffers: Vec<Buffer>,
 }
 
 impl Aetna {
@@ -837,6 +921,45 @@ impl Aetna {
         let pipeline = Pipeline::init(&logical_device, &swapchain, &renderpass)?;
 
         let pools = Pools::init(&logical_device, &queue_families)?;
+
+        let allocator_create_info = vk_mem::AllocatorCreateInfo {
+            physical_device,
+            device: logical_device.clone(),
+            instance: instance.clone(),
+            ..Default::default()
+        };
+        let allocator = vk_mem::Allocator::new(&allocator_create_info)?;
+        let allocation_create_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::CpuToGpu,
+            ..Default::default()
+        };
+        let buffer1 = Buffer::new(
+            &allocator,
+            48,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+            vk_mem::MemoryUsage::CpuToGpu,
+        )?;
+        buffer1.fill(
+            &allocator,
+            &[
+                0.5f32, 0.0f32, 0.0f32, 1.0f32, 0.0f32, 0.2f32, 0.0f32, 1.0f32, -0.5f32, 0.0f32,
+                0.0f32, 1.0f32,
+            ],
+        )?;
+        let buffer2 = Buffer::new(
+            &allocator,
+            60,
+            vk::BufferUsageFlags::VERTEX_BUFFER,
+            vk_mem::MemoryUsage::CpuToGpu,
+        )?;
+        buffer2.fill(
+            &allocator,
+            &[
+                15.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32, 15.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32,
+                15.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32,
+            ],
+        )?;
+
         let commandbuffers =
             create_commandbuffers(&logical_device, &pools, swapchain.amount_of_images)?;
         fill_commandbuffers(
@@ -845,9 +968,10 @@ impl Aetna {
             &renderpass,
             &swapchain,
             &pipeline,
+            &buffer1.buffer,
+            &buffer2.buffer,
         )?;
 
-        swapchain.create_framebuffers(&logical_device, renderpass)?;
         Ok(Aetna {
             window,
             entry,
@@ -864,6 +988,8 @@ impl Aetna {
             pipeline,
             pools,
             commandbuffers,
+            allocator,
+            buffers: vec![buffer1, buffer2],
         })
     }
 }
@@ -874,6 +1000,12 @@ impl Drop for Aetna {
             self.device
                 .device_wait_idle()
                 .expect("Something went wrong while waiting.");
+            for b in &self.buffers {
+                self.allocator
+                    .destroy_buffer(b.buffer, &b.allocation)
+                    .expect("problem with buffer destruction");
+            }
+            self.allocator.destroy();
             self.pools.cleanup(&self.device);
             self.pipeline.cleanup(&self.device);
             self.device.destroy_render_pass(self.renderpass, None);
