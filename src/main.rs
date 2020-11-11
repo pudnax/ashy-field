@@ -10,6 +10,7 @@ mod utils;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+
     let eventloop = EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
     let mut aetna = Aetna::init(window)?;
@@ -62,11 +63,13 @@ fn main() -> Result<()> {
                     ])
                     .expect("resetting fences");
             }
+
             let semaphores_available =
                 [aetna.swapchain.image_available[aetna.swapchain.current_image]];
             let waiting_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
             let semaphores_finished =
                 [aetna.swapchain.rendering_finished[aetna.swapchain.current_image]];
+
             let commandbuffers = [aetna.commandbuffers[image_index as usize]];
             let submit_info = [vk::SubmitInfo::builder()
                 .wait_semaphores(&semaphores_available)
@@ -86,6 +89,7 @@ fn main() -> Result<()> {
             };
             let swapchains = [aetna.swapchain.swapchain];
             let indices = [image_index];
+
             let present_info = vk::PresentInfoKHR::builder()
                 .wait_semaphores(&semaphores_finished)
                 .swapchains(&swapchains)
@@ -126,6 +130,7 @@ fn init_instance(
         Some(version) => version,
         None => vk::make_version(1, 0, 0),
     };
+
     let enginename = CString::new("UnknownGameEngine")
         .map_err(|e| eyre!("Failed to create CStr from: {}", e))?;
     let appname =
@@ -136,6 +141,7 @@ fn init_instance(
         .engine_name(&enginename)
         .engine_version(vk::make_version(0, 42, 0))
         .api_version(api_version);
+
     let layer_names_c: Vec<CString> = layer_names
         .iter()
         .map(|&ln| CString::new(ln).unwrap())
@@ -150,6 +156,7 @@ fn init_instance(
         .chain(vec![ash::extensions::ext::DebugUtils::name()])
         .map(|s| s.as_ptr())
         .collect();
+
     let mut debugcreateinfo = vk::DebugUtilsMessengerCreateInfoEXT::builder()
         .message_severity(
             vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
@@ -303,6 +310,7 @@ impl QueueFamilies {
         let queuefamilyproperties =
             unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
         let mut found_graphics_q_index = None;
+
         let mut found_transfer_q_index = None;
         for (index, qfam) in queuefamilyproperties.iter().enumerate() {
             if qfam.queue_count > 0
@@ -357,6 +365,7 @@ fn init_device_and_queues(
             .queue_priorities(&priorities)
             .build(),
     ];
+
     let device_extension_name_pointers: Vec<*const i8> =
         vec![ash::extensions::khr::Swapchain::name().as_ptr()];
     let device_create_info = vk::DeviceCreateInfo::builder()
@@ -406,6 +415,7 @@ impl SwapchainDongXi {
         let extent = surface_capabilities.current_extent;
         let surface_present_modes = surfaces.get_present_modes(physical_device)?;
         let surface_format = *surfaces.get_formats(physical_device)?.first().unwrap();
+
         let queuefamilies = [queue_families.graphics_q_index.unwrap()];
         let swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
             .surface(surfaces.surface)
@@ -423,6 +433,7 @@ impl SwapchainDongXi {
             .pre_transform(surface_capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(vk::PresentModeKHR::FIFO);
+
         let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, logical_device);
         let swapchain = unsafe { swapchain_loader.create_swapchain(&swapchain_create_info, None)? };
         let swapchain_images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
@@ -444,10 +455,12 @@ impl SwapchainDongXi {
                 unsafe { logical_device.create_image_view(&imageview_create_info, None) }?;
             swapchain_imageviews.push(imageview);
         }
+
         let mut image_available = vec![];
         let mut rendering_finished = vec![];
         let mut may_begin_drawing = vec![];
         let semaphoreinfo = vk::SemaphoreCreateInfo::builder();
+
         let fenceinfo = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
         for _ in 0..amount_of_images {
             let semaphore_available =
@@ -474,6 +487,7 @@ impl SwapchainDongXi {
             may_begin_drawing,
         })
     }
+
     unsafe fn cleanup(&mut self, logical_device: &ash::Device) {
         for fence in &self.may_begin_drawing {
             logical_device.destroy_fence(*fence, None);
@@ -529,6 +543,7 @@ fn init_renderpass(
         .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
         .samples(vk::SampleCountFlags::TYPE_1)
         .build()];
+
     let color_attachment_references = [vk::AttachmentReference {
         attachment: 0,
         layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
@@ -546,6 +561,7 @@ fn init_renderpass(
             vk::AccessFlags::COLOR_ATTACHMENT_READ | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
         )
         .build()];
+
     let renderpass_info = vk::RenderPassCreateInfo::builder()
         .attachments(&attachments)
         .subpasses(&subpasses)
@@ -576,10 +592,12 @@ impl Pipeline {
         let vertexshader_createinfo = vk::ShaderModuleCreateInfo::builder().code(&vs_src);
         let vertexshader_module =
             unsafe { logical_device.create_shader_module(&vertexshader_createinfo, None)? };
+
         let fs_src = include_spirv_from_outdir!("/shaders/shader.frag.spv");
         let fragmentshader_createinfo = vk::ShaderModuleCreateInfo::builder().code(&fs_src);
         let fragmentshader_module =
             unsafe { logical_device.create_shader_module(&fragmentshader_createinfo, None)? };
+
         let mainfunctionname = std::ffi::CString::new("main").unwrap();
         let vertexshader_stage = vk::PipelineShaderStageCreateInfo::builder()
             .stage(vk::ShaderStageFlags::VERTEX)
@@ -589,6 +607,7 @@ impl Pipeline {
             .stage(vk::ShaderStageFlags::FRAGMENT)
             .module(fragmentshader_module)
             .name(&mainfunctionname);
+
         let shader_stages = vec![vertexshader_stage.build(), fragmentshader_stage.build()];
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder();
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
@@ -614,8 +633,10 @@ impl Pipeline {
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .cull_mode(vk::CullModeFlags::NONE)
             .polygon_mode(vk::PolygonMode::FILL);
+
         let multisampler_info = vk::PipelineMultisampleStateCreateInfo::builder()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+
         let colourblend_attachments = [vk::PipelineColorBlendAttachmentState::builder()
             .blend_enable(true)
             .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
@@ -631,8 +652,10 @@ impl Pipeline {
                     | vk::ColorComponentFlags::A,
             )
             .build()];
+
         let colourblend_info =
             vk::PipelineColorBlendStateCreateInfo::builder().attachments(&colourblend_attachments);
+
         let pipelinelayout_info = vk::PipelineLayoutCreateInfo::builder();
         let pipelinelayout =
             unsafe { logical_device.create_pipeline_layout(&pipelinelayout_info, None) }?;
@@ -647,6 +670,7 @@ impl Pipeline {
             .layout(pipelinelayout)
             .render_pass(*renderpass)
             .subpass(0);
+
         let graphicspipeline = unsafe {
             logical_device
                 .create_graphics_pipelines(
@@ -677,11 +701,14 @@ impl Pools {
         let graphics_commandpool_info = vk::CommandPoolCreateInfo::builder()
             .queue_family_index(queue_families.graphics_q_index.unwrap())
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+
         let commandpool_graphics =
             unsafe { logical_device.create_command_pool(&graphics_commandpool_info, None) }?;
+
         let transfer_commandpool_info = vk::CommandPoolCreateInfo::builder()
             .queue_family_index(queue_families.transfer_q_index.unwrap())
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+
         let commandpool_transfer =
             unsafe { logical_device.create_command_pool(&transfer_commandpool_info, None) }?;
 
@@ -726,6 +753,7 @@ fn fill_commandbuffers(
                 float32: [0.0, 0.0, 0.08, 1.0],
             },
         }];
+
         let renderpass_begininfo = vk::RenderPassBeginInfo::builder()
             .render_pass(*renderpass)
             .framebuffer(swapchain.framebuffers[i])
