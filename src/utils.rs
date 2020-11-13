@@ -4,7 +4,7 @@ pub fn size_of_slice<T: Sized>(slice: &[T]) -> usize {
     std::mem::size_of::<T>() * slice.len()
 }
 
-pub fn make_spirv(data: &[u8]) -> std::borrow::Cow<'_, [u32]> {
+pub fn make_spirv(data: &[u8]) -> std::borrow::Cow<[u32]> {
     const MAGIC_NUMBER: u32 = 0x723_0203;
 
     assert_eq!(
