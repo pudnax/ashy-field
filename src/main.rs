@@ -280,16 +280,24 @@ impl Drop for SurfaceDongXi {
 
 fn init_physical_device_and_properties(
     instance: &ash::Instance,
-) -> Result<(vk::PhysicalDevice, vk::PhysicalDeviceProperties), vk::Result> {
+) -> Result<
+    (
+        vk::PhysicalDevice,
+        vk::PhysicalDeviceProperties,
+        vk::PhysicalDeviceFeatures,
+    ),
+    vk::Result,
+> {
     let phys_devs = unsafe { instance.enumerate_physical_devices()? };
-    let mut chosen = None;
+    let mut chosen = Err(vk::Result::ERROR_INITIALIZATION_FAILED);
     for p in phys_devs {
         let properties = unsafe { instance.get_physical_device_properties(p) };
+        let features = unsafe { instance.get_physical_device_features(p) };
         if properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
-            chosen = Some((p, properties));
+            chosen = Ok((p, properties, features));
         }
     }
-    chosen.ok_or(vk::Result::ERROR_UNKNOWN)
+    chosen
 }
 
 struct QueueFamilies {
@@ -628,7 +636,7 @@ impl Pipeline {
             .vertex_attribute_descriptions(&vertex_attrib_descs)
             .vertex_binding_descriptions(&vertex_binding_descs);
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
-            .topology(vk::PrimitiveTopology::POINT_LIST);
+            .topology(vk::PrimitiveTopology::LINE_STRIP);
         let viewports = [vk::Viewport {
             x: 0.,
             y: 0.,
@@ -867,7 +875,7 @@ impl Aetna {
         let debug = DebugDongXi::init(&entry, &instance)?;
         let surfaces = SurfaceDongXi::init(&window, &entry, &instance)?;
 
-        let (physical_device, physical_device_properties) =
+        let (physical_device, physical_device_properties, physical_device_features) =
             init_physical_device_and_properties(&instance)?;
 
         let queue_families = QueueFamilies::init(&instance, physical_device, &surfaces)?;
@@ -898,10 +906,6 @@ impl Aetna {
             ..Default::default()
         };
         let allocator = vk_mem::Allocator::new(&allocator_create_info)?;
-        let allocation_create_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::CpuToGpu,
-            ..Default::default()
-        };
         let buffer1 = Buffer::new(
             &allocator,
             48,
