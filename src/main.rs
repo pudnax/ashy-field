@@ -369,10 +369,12 @@ fn init_device_and_queues(
     ];
     let device_extension_name_pointers: Vec<*const i8> =
         vec![ash::extensions::khr::Swapchain::name().as_ptr()];
+    let features = vk::PhysicalDeviceFeatures::builder().fill_mode_non_solid(true);
     let device_create_info = vk::DeviceCreateInfo::builder()
         .queue_create_infos(&queue_infos)
         .enabled_extension_names(&device_extension_name_pointers)
-        .enabled_layer_names(&layer_name_pointers);
+        .enabled_layer_names(&layer_name_pointers)
+        .enabled_features(&features);
     let logical_device =
         unsafe { instance.create_device(physical_device, &device_create_info, None)? };
     let graphics_queue =
@@ -605,38 +607,38 @@ impl Pipeline {
                 binding: 0,
                 location: 0,
                 offset: 0,
-                format: vk::Format::R32G32B32A32_SFLOAT,
+                format: vk::Format::R32G32B32_SFLOAT,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
                 location: 1,
                 offset: 0,
-                format: vk::Format::R32_SFLOAT,
+                format: vk::Format::R32G32B32_SFLOAT,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
                 location: 2,
-                offset: 4,
-                format: vk::Format::R32G32B32A32_SFLOAT,
+                offset: 12,
+                format: vk::Format::R32G32B32_SFLOAT,
             },
         ];
         let vertex_binding_descs = [
             vk::VertexInputBindingDescription {
                 binding: 0,
-                stride: 16,
+                stride: 12,
                 input_rate: vk::VertexInputRate::VERTEX,
             },
             vk::VertexInputBindingDescription {
                 binding: 1,
-                stride: 20,
-                input_rate: vk::VertexInputRate::VERTEX,
+                stride: 24,
+                input_rate: vk::VertexInputRate::INSTANCE,
             },
         ];
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_attribute_descriptions(&vertex_attrib_descs)
             .vertex_binding_descriptions(&vertex_binding_descs);
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::builder()
-            .topology(vk::PrimitiveTopology::LINE_STRIP);
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
         let viewports = [vk::Viewport {
             x: 0.,
             y: 0.,
@@ -759,8 +761,7 @@ fn fill_commandbuffers(
     renderpass: &vk::RenderPass,
     swapchain: &SwapchainDongXi,
     pipeline: &Pipeline,
-    vb1: &vk::Buffer,
-    vb2: &vk::Buffer,
+    models: &[Model<[f32; 3], [f32; 6]>],
 ) -> Result<(), vk::Result> {
     for (i, &commandbuffer) in commandbuffers.iter().enumerate() {
         let commandbuffer_begininfo = vk::CommandBufferBeginInfo::builder();
@@ -791,9 +792,9 @@ fn fill_commandbuffers(
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.pipeline,
             );
-            logical_device.cmd_bind_vertex_buffers(commandbuffer, 0, &[*vb1], &[0]);
-            logical_device.cmd_bind_vertex_buffers(commandbuffer, 1, &[*vb2], &[0]);
-            logical_device.cmd_draw(commandbuffer, 3, 1, 0, 0);
+            for m in models {
+                m.draw(logical_device, commandbuffer);
+            }
             logical_device.cmd_end_render_pass(commandbuffer);
             logical_device.end_command_buffer(commandbuffer)?;
         }
@@ -805,13 +806,16 @@ struct Buffer {
     buffer: vk::Buffer,
     allocation: vk_mem::Allocation,
     allocation_info: vk_mem::AllocationInfo,
+    size_in_bytes: u64,
+    buffer_usage: vk::BufferUsageFlags,
+    memory_usage: vk_mem::MemoryUsage,
 }
 
 impl Buffer {
     fn new(
         allocator: &vk_mem::Allocator,
         size_in_bytes: u64,
-        usage: vk::BufferUsageFlags,
+        buffer_usage: vk::BufferUsageFlags,
         memory_usage: vk_mem::MemoryUsage,
     ) -> Result<Buffer, vk_mem::error::Error> {
         let allocation_create_info = vk_mem::AllocationCreateInfo {
@@ -821,7 +825,7 @@ impl Buffer {
         let (buffer, allocation, allocation_info) = allocator.create_buffer(
             &ash::vk::BufferCreateInfo::builder()
                 .size(size_in_bytes)
-                .usage(usage)
+                .usage(buffer_usage)
                 .build(),
             &allocation_create_info,
         )?;
@@ -829,17 +833,259 @@ impl Buffer {
             buffer,
             allocation,
             allocation_info,
+            size_in_bytes,
+            buffer_usage,
+            memory_usage,
         })
     }
     fn fill<T: Sized>(
-        &self,
+        &mut self,
         allocator: &vk_mem::Allocator,
         data: &[T],
     ) -> Result<(), vk_mem::error::Error> {
+        let bytes_to_write = (data.len() * std::mem::size_of::<T>()) as u64;
+        if bytes_to_write > self.size_in_bytes {
+            allocator.destroy_buffer(self.buffer, &self.allocation);
+            let newbuffer = Buffer::new(
+                allocator,
+                bytes_to_write,
+                self.buffer_usage,
+                self.memory_usage,
+            )?;
+            *self = newbuffer;
+        }
         let data_ptr = allocator.map_memory(&self.allocation)? as *mut T;
         unsafe { data_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
         allocator.unmap_memory(&self.allocation)?;
         Ok(())
+    }
+}
+#[derive(Debug, Clone)]
+struct InvalidHandle;
+impl std::fmt::Display for InvalidHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "invalid handle")
+    }
+}
+impl std::error::Error for InvalidHandle {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+struct Model<V, I> {
+    vertexdata: Vec<V>,
+    handle_to_index: std::collections::HashMap<usize, usize>,
+    handles: Vec<usize>,
+    instances: Vec<I>,
+    first_invisible: usize,
+    next_handle: usize,
+    vertexbuffer: Option<Buffer>,
+    instancebuffer: Option<Buffer>,
+}
+impl<V, I> Model<V, I> {
+    fn get(&self, handle: usize) -> Option<&I> {
+        if let Some(&index) = self.handle_to_index.get(&handle) {
+            self.instances.get(index)
+        } else {
+            None
+        }
+    }
+    fn get_mut(&mut self, handle: usize) -> Option<&mut I> {
+        if let Some(&index) = self.handle_to_index.get(&handle) {
+            self.instances.get_mut(index)
+        } else {
+            None
+        }
+    }
+    fn is_visible(&self, handle: usize) -> Result<bool, InvalidHandle> {
+        if let Some(index) = self.handle_to_index.get(&handle) {
+            Ok(index < &self.first_invisible)
+        } else {
+            Err(InvalidHandle)
+        }
+    }
+    fn make_visible(&mut self, handle: usize) -> Result<(), InvalidHandle> {
+        //if already visible: do nothing
+        if let Some(&index) = self.handle_to_index.get(&handle) {
+            if index < self.first_invisible {
+                return Ok(());
+            }
+            //else: move to position first_invisible and increase value of first_invisible
+            self.swap_by_index(index, self.first_invisible);
+            self.first_invisible += 1;
+            Ok(())
+        } else {
+            Err(InvalidHandle)
+        }
+    }
+    fn make_invisible(&mut self, handle: usize) -> Result<(), InvalidHandle> {
+        //if already invisible: do nothing
+        if let Some(&index) = self.handle_to_index.get(&handle) {
+            if index >= self.first_invisible {
+                return Ok(());
+            }
+            //else: move to position before first_invisible and decrease value of first_invisible
+            self.swap_by_index(index, self.first_invisible - 1);
+            self.first_invisible -= 1;
+            Ok(())
+        } else {
+            Err(InvalidHandle)
+        }
+    }
+    fn insert(&mut self, element: I) -> usize {
+        let handle = self.next_handle;
+        self.next_handle += 1;
+        let index = self.instances.len();
+        self.instances.push(element);
+        self.handles.push(handle);
+        self.handle_to_index.insert(handle, index);
+        handle
+    }
+    fn insert_visibly(&mut self, element: I) -> usize {
+        let new_handle = self.insert(element);
+        self.make_visible(new_handle).ok();
+        new_handle
+    }
+    fn remove(&mut self, handle: usize) -> Result<I, InvalidHandle> {
+        if let Some(&index) = self.handle_to_index.get(&handle) {
+            if index < self.first_invisible {
+                self.swap_by_index(index, self.first_invisible - 1);
+                self.first_invisible -= 1;
+            }
+            self.swap_by_index(self.first_invisible, self.instances.len() - 1);
+            self.handles.pop();
+            self.handle_to_index.remove(&handle);
+            self.instances.pop().ok_or(InvalidHandle)
+        } else {
+            Err(InvalidHandle)
+        }
+    }
+    fn swap_by_handle(&mut self, handle1: usize, handle2: usize) -> Result<(), InvalidHandle> {
+        if handle1 == handle2 {
+            return Ok(());
+        }
+        if let (Some(&index1), Some(&index2)) = (
+            self.handle_to_index.get(&handle1),
+            self.handle_to_index.get(&handle2),
+        ) {
+            self.handles.swap(index1, index2);
+            self.instances.swap(index1, index2);
+            self.handle_to_index.insert(index1, handle2);
+            self.handle_to_index.insert(index2, handle1);
+            Ok(())
+        } else {
+            Err(InvalidHandle)
+        }
+    }
+    fn swap_by_index(&mut self, index1: usize, index2: usize) {
+        if index1 == index2 {
+            return;
+        }
+        let handle1 = self.handles[index1];
+        let handle2 = self.handles[index2];
+        self.handles.swap(index1, index2);
+        self.instances.swap(index1, index2);
+        self.handle_to_index.insert(index1, handle2);
+        self.handle_to_index.insert(index2, handle1);
+    }
+    fn update_vertexbuffer(
+        &mut self,
+        allocator: &vk_mem::Allocator,
+    ) -> Result<(), vk_mem::error::Error> {
+        if let Some(buffer) = &mut self.vertexbuffer {
+            buffer.fill(allocator, &self.vertexdata)?;
+            Ok(())
+        } else {
+            let bytes = (self.vertexdata.len() * std::mem::size_of::<V>()) as u64;
+            let mut buffer = Buffer::new(
+                &allocator,
+                bytes,
+                vk::BufferUsageFlags::VERTEX_BUFFER,
+                vk_mem::MemoryUsage::CpuToGpu,
+            )?;
+            buffer.fill(allocator, &self.vertexdata)?;
+            self.vertexbuffer = Some(buffer);
+            Ok(())
+        }
+    }
+    fn update_instancebuffer(
+        &mut self,
+        allocator: &vk_mem::Allocator,
+    ) -> Result<(), vk_mem::error::Error> {
+        if let Some(buffer) = &mut self.instancebuffer {
+            buffer.fill(allocator, &self.instances[0..self.first_invisible])?;
+            Ok(())
+        } else {
+            let bytes = (self.first_invisible * std::mem::size_of::<I>()) as u64;
+            let mut buffer = Buffer::new(
+                &allocator,
+                bytes,
+                vk::BufferUsageFlags::VERTEX_BUFFER,
+                vk_mem::MemoryUsage::CpuToGpu,
+            )?;
+            buffer.fill(allocator, &self.instances[0..self.first_invisible])?;
+            self.instancebuffer = Some(buffer);
+            Ok(())
+        }
+    }
+    fn draw(&self, logical_device: &ash::Device, commandbuffer: vk::CommandBuffer) {
+        if let Some(vertexbuffer) = &self.vertexbuffer {
+            if let Some(instancebuffer) = &self.instancebuffer {
+                if self.first_invisible > 0 {
+                    unsafe {
+                        logical_device.cmd_bind_vertex_buffers(
+                            commandbuffer,
+                            0,
+                            &[vertexbuffer.buffer],
+                            &[0],
+                        );
+                        logical_device.cmd_bind_vertex_buffers(
+                            commandbuffer,
+                            1,
+                            &[instancebuffer.buffer],
+                            &[0],
+                        );
+                        logical_device.cmd_draw(
+                            commandbuffer,
+                            self.vertexdata.len() as u32,
+                            self.first_invisible as u32,
+                            0,
+                            0,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+impl Model<[f32; 3], [f32; 6]> {
+    fn cube() -> Model<[f32; 3], [f32; 6]> {
+        let lbf = [-0.1, 0.1, 0.0]; //lbf: left-bottom-front
+        let lbb = [-0.1, 0.1, 0.1];
+        let ltf = [-0.1, -0.1, 0.0];
+        let ltb = [-0.1, -0.1, 0.1];
+        let rbf = [0.1, 0.1, 0.0];
+        let rbb = [0.1, 0.1, 0.1];
+        let rtf = [0.1, -0.1, 0.0];
+        let rtb = [0.1, -0.1, 0.1];
+        Model {
+            vertexdata: vec![
+                lbf, lbb, rbb, lbf, rbb, rbf, //bottom
+                ltf, rtb, ltb, ltf, rtf, rtb, //top
+                lbf, rtf, ltf, lbf, rbf, rtf, //front
+                lbb, ltb, rtb, lbb, rtb, rbb, //back
+                lbf, ltf, lbb, lbb, ltf, ltb, //left
+                rbf, rbb, rtf, rbb, rtb, rtf, //right
+            ],
+            handle_to_index: std::collections::HashMap::new(),
+            handles: Vec::new(),
+            instances: Vec::new(),
+            first_invisible: 0,
+            next_handle: 0,
+            vertexbuffer: None,
+            instancebuffer: None,
+        }
     }
 }
 
@@ -853,6 +1099,7 @@ struct Aetna {
     surfaces: std::mem::ManuallyDrop<SurfaceDongXi>,
     physical_device: vk::PhysicalDevice,
     physical_device_properties: vk::PhysicalDeviceProperties,
+    physical_device_features: vk::PhysicalDeviceFeatures,
     queue_families: QueueFamilies,
     queues: Queues,
     device: ash::Device,
@@ -862,7 +1109,7 @@ struct Aetna {
     pools: Pools,
     commandbuffers: Vec<vk::CommandBuffer>,
     allocator: vk_mem::Allocator,
-    buffers: Vec<Buffer>,
+    models: Vec<Model<[f32; 3], [f32; 6]>>,
 }
 
 impl Aetna {
@@ -906,32 +1153,11 @@ impl Aetna {
             ..Default::default()
         };
         let allocator = vk_mem::Allocator::new(&allocator_create_info)?;
-        let buffer1 = Buffer::new(
-            &allocator,
-            48,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            vk_mem::MemoryUsage::CpuToGpu,
-        )?;
-        buffer1.fill(
-            &allocator,
-            &[
-                0.5f32, 0.0f32, 0.0f32, 1.0f32, 0.0f32, 0.2f32, 0.0f32, 1.0f32, -0.5f32, 0.0f32,
-                0.0f32, 1.0f32,
-            ],
-        )?;
-        let buffer2 = Buffer::new(
-            &allocator,
-            60,
-            vk::BufferUsageFlags::VERTEX_BUFFER,
-            vk_mem::MemoryUsage::CpuToGpu,
-        )?;
-        buffer2.fill(
-            &allocator,
-            &[
-                15.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32, 15.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32,
-                15.0f32, 0.0f32, 1.0f32, 0.0f32, 1.0f32,
-            ],
-        )?;
+        let mut cube = Model::cube();
+        cube.insert_visibly([0.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        cube.update_vertexbuffer(&allocator);
+        cube.update_instancebuffer(&allocator);
+        let models = vec![cube];
 
         let commandbuffers =
             create_commandbuffers(&logical_device, &pools, swapchain.amount_of_images)?;
@@ -941,8 +1167,7 @@ impl Aetna {
             &renderpass,
             &swapchain,
             &pipeline,
-            &buffer1.buffer,
-            &buffer2.buffer,
+            &models,
         )?;
 
         Ok(Aetna {
@@ -953,6 +1178,7 @@ impl Aetna {
             surfaces: std::mem::ManuallyDrop::new(surfaces),
             physical_device,
             physical_device_properties,
+            physical_device_features,
             queue_families,
             queues,
             device: logical_device,
@@ -962,7 +1188,7 @@ impl Aetna {
             pools,
             commandbuffers,
             allocator,
-            buffers: vec![buffer1, buffer2],
+            models,
         })
     }
 }
@@ -973,10 +1199,17 @@ impl Drop for Aetna {
             self.device
                 .device_wait_idle()
                 .expect("Something went wrong while waiting.");
-            for b in &self.buffers {
-                self.allocator
-                    .destroy_buffer(b.buffer, &b.allocation)
-                    .expect("problem with buffer destruction");
+            for m in &self.models {
+                if let Some(vb) = &m.vertexbuffer {
+                    self.allocator
+                        .destroy_buffer(vb.buffer, &vb.allocation)
+                        .expect("problem with buffer destruction");
+                }
+                if let Some(ib) = &m.instancebuffer {
+                    self.allocator
+                        .destroy_buffer(ib.buffer, &ib.allocation)
+                        .expect("problem with buffer destruction");
+                }
             }
             self.allocator.destroy();
             self.pools.cleanup(&self.device);
