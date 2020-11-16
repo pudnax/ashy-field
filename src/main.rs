@@ -755,13 +755,13 @@ fn create_commandbuffers(
     unsafe { logical_device.allocate_command_buffers(&commandbuf_allocate_info) }
 }
 
-fn fill_commandbuffers(
+fn fill_commandbuffers<V, I>(
     commandbuffers: &[vk::CommandBuffer],
     logical_device: &ash::Device,
     renderpass: &vk::RenderPass,
     swapchain: &SwapchainDongXi,
     pipeline: &Pipeline,
-    models: &[Model<[f32; 3], [f32; 6]>],
+    models: &[Model<V, I>],
 ) -> Result<(), vk::Result> {
     for (i, &commandbuffer) in commandbuffers.iter().enumerate() {
         let commandbuffer_begininfo = vk::CommandBufferBeginInfo::builder();
@@ -871,6 +871,12 @@ impl std::error::Error for InvalidHandle {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
+}
+
+#[repr(C)]
+struct InstanceData {
+    position: [f32; 3],
+    colour: [f32; 3],
 }
 
 struct Model<V, I> {
@@ -1060,7 +1066,36 @@ impl<V, I> Model<V, I> {
     }
 }
 impl Model<[f32; 3], [f32; 6]> {
-    fn cube() -> Model<[f32; 3], [f32; 6]> {
+    fn cube() -> Self {
+        let lbf = [-0.1, 0.1, 0.0]; //lbf: left-bottom-front
+        let lbb = [-0.1, 0.1, 0.1];
+        let ltf = [-0.1, -0.1, 0.0];
+        let ltb = [-0.1, -0.1, 0.1];
+        let rbf = [0.1, 0.1, 0.0];
+        let rbb = [0.1, 0.1, 0.1];
+        let rtf = [0.1, -0.1, 0.0];
+        let rtb = [0.1, -0.1, 0.1];
+        Model {
+            vertexdata: vec![
+                lbf, lbb, rbb, lbf, rbb, rbf, //bottom
+                ltf, rtb, ltb, ltf, rtf, rtb, //top
+                lbf, rtf, ltf, lbf, rbf, rtf, //front
+                lbb, ltb, rtb, lbb, rtb, rbb, //back
+                lbf, ltf, lbb, lbb, ltf, ltb, //left
+                rbf, rbb, rtf, rbb, rtb, rtf, //right
+            ],
+            handle_to_index: std::collections::HashMap::new(),
+            handles: Vec::new(),
+            instances: Vec::new(),
+            first_invisible: 0,
+            next_handle: 0,
+            vertexbuffer: None,
+            instancebuffer: None,
+        }
+    }
+}
+impl Model<[f32; 3], InstanceData> {
+    fn cube() -> Self {
         let lbf = [-0.1, 0.1, 0.0]; //lbf: left-bottom-front
         let lbb = [-0.1, 0.1, 0.1];
         let ltf = [-0.1, -0.1, 0.0];
@@ -1091,7 +1126,7 @@ impl Model<[f32; 3], [f32; 6]> {
 
 // TODO: Rethink about the order of poles in the struct for 'right' drop order
 // to remove ManualDrop
-struct Aetna {
+struct Aetna<V, I> {
     window: winit::window::Window,
     entry: ash::Entry,
     instance: ash::Instance,
@@ -1109,11 +1144,11 @@ struct Aetna {
     pools: Pools,
     commandbuffers: Vec<vk::CommandBuffer>,
     allocator: vk_mem::Allocator,
-    models: Vec<Model<[f32; 3], [f32; 6]>>,
+    models: Vec<Model<V, I>>,
 }
 
-impl Aetna {
-    fn init(window: winit::window::Window) -> Result<Aetna> {
+impl Aetna<[f32; 3], InstanceData> {
+    fn init(window: winit::window::Window) -> Result<Self> {
         let entry = ash::Entry::new()?;
         let extension_names = ash_window::enumerate_required_extensions(&window)?;
 
@@ -1153,10 +1188,22 @@ impl Aetna {
             ..Default::default()
         };
         let allocator = vk_mem::Allocator::new(&allocator_create_info)?;
-        let mut cube = Model::cube();
-        cube.insert_visibly([0.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
-        cube.update_vertexbuffer(&allocator);
-        cube.update_instancebuffer(&allocator);
+        let mut cube = Model::<[f32; 3], InstanceData>::cube();
+        cube.insert_visibly(InstanceData {
+            position: [0.0, 0.0, 0.0],
+            colour: [1.0, 0.0, 0.0],
+        });
+        cube.insert_visibly(InstanceData {
+            position: [0.0, 0.25, 0.0],
+            colour: [0.6, 0.5, 0.0],
+        });
+        cube.insert_visibly(InstanceData {
+            position: [0.0, 0.5, 0.0],
+            colour: [0.0, 0.5, 0.0],
+        });
+
+        cube.update_vertexbuffer(&allocator)?;
+        cube.update_instancebuffer(&allocator)?;
         let models = vec![cube];
 
         let commandbuffers =
@@ -1193,7 +1240,7 @@ impl Aetna {
     }
 }
 
-impl Drop for Aetna {
+impl<V, I> Drop for Aetna<V, I> {
     fn drop(&mut self) {
         unsafe {
             self.device
