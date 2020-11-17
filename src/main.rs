@@ -23,8 +23,8 @@ fn main() -> Result<()> {
             * Mat4::from_scale(0.1),
         colour: [0.5, 0.5, 0.2],
     });
-    cube.update_vertexbuffer(&aetna.allocator);
-    cube.update_instancebuffer(&aetna.allocator);
+    cube.update_vertexbuffer(&aetna.allocator)?;
+    cube.update_instancebuffer(&aetna.allocator)?;
     aetna.models = vec![cube];
     eventloop.run(move |event, _, controlflow| match event {
         Event::WindowEvent { ref event, .. } => match event {
