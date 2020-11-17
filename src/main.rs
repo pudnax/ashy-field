@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_variables)]
 use ash::{version::DeviceV1_0, version::EntryV1_0, version::InstanceV1_0, vk};
 use eyre::*;
 use std::ffi::{c_void, CStr, CString};
@@ -67,7 +68,7 @@ fn main() -> Result<()> {
     cube.update_vertexbuffer(&aetna.allocator)?;
     cube.update_instancebuffer(&aetna.allocator)?;
     aetna.models = vec![cube];
-    let mut camera = Camera::default();
+    let mut camera = Camera::builder().build();
 
     eventloop.run(move |event, _, controlflow| match event {
         Event::WindowEvent {
@@ -89,7 +90,6 @@ fn main() -> Result<()> {
                 println!("{:?}", &keycode);
                 match keycode {
                     VirtualKeyCode::Right => {
-                        println!("Hewwo right");
                         camera.turn_right(0.1);
                     }
                     VirtualKeyCode::Left => {
@@ -1262,25 +1262,107 @@ struct Camera {
     position: Vec3,
     view_direction: Vec3,
     down_direction: Vec3,
+    fovy: f32,
+    aspect: f32,
+    near: f32,
+    far: f32,
+    projectionmatrix: Mat4,
 }
 
-impl Default for Camera {
-    fn default() -> Self {
-        Camera {
-            viewmatrix: Mat4::identity(),
-            position: Vec3::new(0., 0., 0.),
-            view_direction: Vec3::new(0.0, 0.0, 1.0),
-            down_direction: Vec3::new(0.0, 1.0, 0.0),
+struct CameraBuilder {
+    position: Vec3,
+    view_direction: Vec3,
+    down_direction: Vec3,
+    fovy: f32,
+    aspect: f32,
+    near: f32,
+    far: f32,
+}
+
+impl CameraBuilder {
+    fn build(self) -> Camera {
+        if self.far < self.near {
+            println!(
+                "far plane (at {}) closer than near plane (at {}) — is that right?",
+                self.far, self.near
+            );
         }
+        let mut cam = Camera {
+            position: self.position,
+            view_direction: self.view_direction,
+            down_direction: (self
+                .down_direction
+                .map(|v| v - self.down_direction.dot(self.view_direction)))
+            .normalized()
+                * self.view_direction,
+            fovy: self.fovy,
+            aspect: self.aspect,
+            near: self.near,
+            far: self.far,
+            viewmatrix: Mat4::identity(),
+            projectionmatrix: Mat4::identity(),
+        };
+        cam.update_projectionmatrix();
+        cam.update_viewmatrix();
+        cam
+    }
+    fn position(mut self, pos: Vec3) -> CameraBuilder {
+        self.position = pos;
+        self
+    }
+    fn fovy(mut self, fovy: f32) -> CameraBuilder {
+        self.fovy = fovy.max(0.01).min(std::f32::consts::PI - 0.01);
+        self
+    }
+    fn aspect(mut self, aspect: f32) -> CameraBuilder {
+        self.aspect = aspect;
+        self
+    }
+    fn near(mut self, near: f32) -> CameraBuilder {
+        if near <= 0.0 {
+            println!("setting near plane to negative value: {} — you sure?", near);
+        }
+        self.near = near;
+        self
+    }
+    fn far(mut self, far: f32) -> CameraBuilder {
+        if far <= 0.0 {
+            println!("setting far plane to negative value: {} — you sure?", far);
+        }
+        self.far = far;
+        self
+    }
+    fn view_direction(mut self, direction: Vec3) -> CameraBuilder {
+        self.view_direction = direction.normalized();
+        self
+    }
+    fn down_direction(mut self, direction: Vec3) -> CameraBuilder {
+        self.down_direction = direction.normalized();
+        self
     }
 }
+
 impl Camera {
+    fn builder() -> CameraBuilder {
+        CameraBuilder {
+            position: Vec3::new(-3.0, -3.0, -3.0),
+            view_direction: Vec3::new(1.0, 1.0, 1.0).normalized(),
+            down_direction: Vec3::new(-1.0, 2.0, -1.0).normalized(),
+            fovy: std::f32::consts::FRAC_PI_3,
+            aspect: 800.0 / 600.0,
+            near: 0.1,
+            far: 100.0,
+        }
+    }
     fn update_buffer(
         &self,
         allocator: &vk_mem::Allocator,
         buffer: &mut Buffer,
     ) -> Result<(), vk_mem::error::Error> {
-        buffer.fill(allocator, self.viewmatrix.as_slice())?;
+        buffer.fill(
+            allocator,
+            &[self.viewmatrix.as_slice(), self.projectionmatrix.as_slice()],
+        )?;
         Ok(())
     }
     fn update_viewmatrix(&mut self) {
@@ -1302,6 +1384,21 @@ impl Camera {
             Vec4::new(0.0, 0.0, 0.0, 1.0),
         );
         self.viewmatrix = m;
+    }
+    fn update_projectionmatrix(&mut self) {
+        let d = 1.0 / (0.5 * self.fovy).tan();
+        self.projectionmatrix = Mat4::new(
+            [d / self.aspect, 0.0, 0.0, 0.0].into(),
+            [0.0, d, 0.0, 0.0].into(),
+            [
+                0.0,
+                0.0,
+                self.far / (self.far - self.near),
+                -self.near * self.far / (self.far - self.near),
+            ]
+            .into(),
+            [0.0, 0.0, 1.0, 0.0].into(),
+        )
     }
     fn move_forward(&mut self, distance: f32) {
         self.position += distance * self.view_direction;
@@ -1401,12 +1498,12 @@ impl Aetna<[f32; 3], InstanceData> {
 
         let mut uniformbuffer = Buffer::new(
             &allocator,
-            64,
+            128,
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             vk_mem::MemoryUsage::CpuToGpu,
         )?;
-        let cameratransform = Mat4::identity();
-        uniformbuffer.fill(&allocator, cameratransform.as_slice())?;
+        let cameratransforms = [Mat4::identity().as_slice(), Mat4::identity().as_slice()].concat();
+        uniformbuffer.fill(&allocator, &cameratransforms)?;
         let pool_sizes = [vk::DescriptorPoolSize {
             ty: vk::DescriptorType::UNIFORM_BUFFER,
             descriptor_count: swapchain.amount_of_images,
@@ -1429,7 +1526,7 @@ impl Aetna<[f32; 3], InstanceData> {
             let buffer_infos = [vk::DescriptorBufferInfo {
                 buffer: uniformbuffer.buffer,
                 offset: 0,
-                range: 64,
+                range: 128,
             }];
             let desc_sets_write = [vk::WriteDescriptorSet::builder()
                 .dst_set(*descset)
