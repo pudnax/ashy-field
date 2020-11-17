@@ -8,6 +8,7 @@ use winit::{
 
 mod math;
 use math::*;
+mod angle;
 mod utils;
 
 fn main() -> Result<()> {
@@ -16,42 +17,104 @@ fn main() -> Result<()> {
     let window = winit::window::Window::new(&eventloop)?;
     let mut aetna = Aetna::init(window)?;
     let mut cube = Model::<_, InstanceData>::cube();
-    let mut angle = 0.2;
-    let my_special_cube = cube.insert_visibly(InstanceData {
-        modelmatrix: (Mat4::from_angle_plane(angle, Bivec3::unit_xy())
-            * Mat4::from_translation((0.0, 0.5, 0.0).into()))
+    cube.insert_visibly(InstanceData {
+        modelmatrix: Mat4::from_translation((0.0, 0.0, 0.1).into()) * Mat4::from_scale(0.1),
+        colour: [0.2, 0.2, 1.0],
+    });
+    cube.insert_visibly(InstanceData {
+        modelmatrix: Mat4::from_translation((0.05, 0.05, 0.0).into()) * Mat4::from_scale(0.1),
+        colour: [0.9, 0.2, 0.2],
+    });
+    for i in 0..10 {
+        for j in 0..10 {
+            cube.insert_visibly(InstanceData {
+                modelmatrix: Mat4::from_translation(
+                    (i as f32 * 0.2 - 1.0, j as f32 * 0.1 - 1.0, 0.5).into(),
+                ) * Mat4::from_scale(0.3),
+                colour: [0.9, i as f32 * 0.09, j as f32 * 0.02],
+            });
+            cube.insert_visibly(InstanceData {
+                modelmatrix: Mat4::from_translation(
+                    (i as f32 * 0.2 - 1.0, 0.0, j as f32 * 0.2 - 1.0).into(),
+                ) * Mat4::from_scale(0.2),
+                colour: [i as f32 * 0.02, j as f32 * 0.09, 1.0],
+            });
+        }
+    }
+    cube.insert_visibly(InstanceData {
+        modelmatrix: (Mat4::from_angle_plane(
+            0.0,
+            Bivec3::from_normalized_axis(Vec3::new(0.0, 0.0, 1.4).normalized()),
+        ) * Mat4::from_translation((0.0, 0.5, 0.0).into()))
             * Mat4::from_scale(0.1),
-        colour: [0.5, 0.5, 0.2],
+        colour: [0.2, 0.5, 0.0],
+    });
+    cube.insert_visibly(InstanceData {
+        modelmatrix: Mat4::from_translation((0.5, 0.0, 0.0).into())
+            * Mat4::from_nonuniform_scale((0.5, 0.01, 0.01).into()),
+        colour: [1.0, 0.5, 0.5],
+    });
+    cube.insert_visibly(InstanceData {
+        modelmatrix: Mat4::from_translation((0.0, 0.5, 0.0).into())
+            * Mat4::from_nonuniform_scale((0.01, 0.5, 0.01).into()),
+        colour: [0.5, 1.0, 0.5],
+    });
+    cube.insert_visibly(InstanceData {
+        modelmatrix: Mat4::from_translation((0.0, 0.0, 0.0).into())
+            * Mat4::from_nonuniform_scale((0.01, 0.01, 0.5).into()),
+        colour: [0.5, 0.5, 1.0],
     });
     cube.update_vertexbuffer(&aetna.allocator)?;
     cube.update_instancebuffer(&aetna.allocator)?;
     aetna.models = vec![cube];
+    let mut camera = Camera::default();
+
     eventloop.run(move |event, _, controlflow| match event {
-        Event::WindowEvent { ref event, .. } => match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                        ..
-                    },
+        Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } => {
+            *controlflow = ControlFlow::Exit;
+        }
+        Event::WindowEvent {
+            event: WindowEvent::KeyboardInput { input, .. },
+            ..
+        } => {
+            if let KeyboardInput {
+                state: ElementState::Pressed,
+                virtual_keycode: Some(keycode),
                 ..
-            } => {
-                *controlflow = ControlFlow::Exit;
+            } = input
+            {
+                println!("{:?}", &keycode);
+                match keycode {
+                    VirtualKeyCode::Right => {
+                        println!("Hewwo right");
+                        camera.turn_right(0.1);
+                    }
+                    VirtualKeyCode::Left => {
+                        camera.turn_left(0.1);
+                    }
+                    VirtualKeyCode::Up => {
+                        camera.move_forward(0.05);
+                    }
+                    VirtualKeyCode::Down => {
+                        camera.move_backward(0.05);
+                    }
+                    VirtualKeyCode::Space => {
+                        camera.turn_down(0.02);
+                    }
+                    VirtualKeyCode::Z => {
+                        camera.turn_up(0.02);
+                    }
+                    VirtualKeyCode::Escape => {
+                        *controlflow = ControlFlow::Exit;
+                    }
+                    _ => {}
+                }
             }
-            _ => {}
-        },
-
+        }
         Event::MainEventsCleared => {
-            angle += 0.01;
-            aetna.models[0]
-                .get_mut(my_special_cube)
-                .unwrap()
-                .modelmatrix = (Mat4::from_angle_plane(angle, Bivec3::unit_xy())
-                * Mat4::from_translation((0.0, 0.5, 0.0).into()))
-                * Mat4::from_scale(0.1);
-
             aetna.window.request_redraw();
         }
         Event::RedrawRequested(_) => {
@@ -83,8 +146,12 @@ fn main() -> Result<()> {
                     ])
                     .expect("resetting fences");
             }
+            camera
+                .update_buffer(&aetna.allocator, &mut aetna.uniformbuffer)
+                .expect("Failed update camera buffer.");
             for m in &mut aetna.models {
-                m.update_instancebuffer(&aetna.allocator);
+                m.update_instancebuffer(&aetna.allocator)
+                    .expect("Failed update instance buffer");
             }
             aetna
                 .update_commandbuffer(image_index as usize)
@@ -660,11 +727,15 @@ fn init_renderpass(
 struct Pipeline {
     pipeline: vk::Pipeline,
     layout: vk::PipelineLayout,
+    descriptor_set_layouts: Vec<vk::DescriptorSetLayout>,
 }
 
 impl Pipeline {
     fn cleanup(&self, logical_device: &ash::Device) {
         unsafe {
+            for dsl in &self.descriptor_set_layouts {
+                logical_device.destroy_descriptor_set_layout(*dsl, None);
+            }
             logical_device.destroy_pipeline(self.pipeline, None);
             logical_device.destroy_pipeline_layout(self.layout, None);
         }
@@ -793,7 +864,19 @@ impl Pipeline {
             .build()];
         let colourblend_info =
             vk::PipelineColorBlendStateCreateInfo::builder().attachments(&colourblend_attachments);
-        let pipelinelayout_info = vk::PipelineLayoutCreateInfo::builder();
+        let descriptorset_layout_binding_descs = [vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::VERTEX)
+            .build()];
+        let descriptorset_layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&descriptorset_layout_binding_descs);
+        let descriptorsetlayout = unsafe {
+            logical_device.create_descriptor_set_layout(&descriptorset_layout_info, None)
+        }?;
+        let desclayouts = vec![descriptorsetlayout];
+        let pipelinelayout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(&desclayouts);
         let pipelinelayout =
             unsafe { logical_device.create_pipeline_layout(&pipelinelayout_info, None) }?;
         let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
@@ -824,6 +907,7 @@ impl Pipeline {
         Ok(Pipeline {
             pipeline: graphicspipeline,
             layout: pipelinelayout,
+            descriptor_set_layouts: desclayouts,
         })
     }
 }
@@ -939,12 +1023,6 @@ impl std::error::Error for InvalidHandle {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
-}
-
-#[repr(C)]
-struct InstanceData {
-    modelmatrix: Mat4,
-    colour: [f32; 3],
 }
 
 struct Model<V, I> {
@@ -1162,6 +1240,12 @@ fn cube<I>() -> Model<[f32; 3], I> {
     }
 }
 
+#[repr(C)]
+struct InstanceData {
+    modelmatrix: Mat4,
+    colour: [f32; 3],
+}
+
 impl Model<[f32; 3], [f32; 6]> {
     fn cube() -> Self {
         cube()
@@ -1170,6 +1254,80 @@ impl Model<[f32; 3], [f32; 6]> {
 impl Model<[f32; 3], InstanceData> {
     fn cube() -> Self {
         cube()
+    }
+}
+
+struct Camera {
+    viewmatrix: Mat4,
+    position: Vec3,
+    view_direction: Vec3,
+    down_direction: Vec3,
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Camera {
+            viewmatrix: Mat4::identity(),
+            position: Vec3::new(0., 0., 0.),
+            view_direction: Vec3::new(0.0, 0.0, 1.0),
+            down_direction: Vec3::new(0.0, 1.0, 0.0),
+        }
+    }
+}
+impl Camera {
+    fn update_buffer(
+        &self,
+        allocator: &vk_mem::Allocator,
+        buffer: &mut Buffer,
+    ) -> Result<(), vk_mem::error::Error> {
+        buffer.fill(allocator, self.viewmatrix.as_slice())?;
+        Ok(())
+    }
+    fn update_viewmatrix(&mut self) {
+        let right = self.down_direction.cross(self.view_direction).normalized();
+        let m = Mat4::new(
+            Vec4::new(right.x, right.y, right.z, -right.dot(self.position)),
+            Vec4::new(
+                self.down_direction.x,
+                self.down_direction.y,
+                self.down_direction.z,
+                -self.down_direction.dot(self.position),
+            ),
+            Vec4::new(
+                self.view_direction.x,
+                self.view_direction.y,
+                self.view_direction.z,
+                -self.view_direction.dot(self.position),
+            ),
+            Vec4::new(0.0, 0.0, 0.0, 1.0),
+        );
+        self.viewmatrix = m;
+    }
+    fn move_forward(&mut self, distance: f32) {
+        self.position += distance * self.view_direction;
+        self.update_viewmatrix();
+    }
+    fn move_backward(&mut self, distance: f32) {
+        self.move_forward(-distance);
+    }
+    fn turn_right(&mut self, angle: f32) {
+        let rotation =
+            Rotor3::from_angle_plane(angle, Bivec3::from_normalized_axis(self.down_direction));
+        self.view_direction = rotation * self.view_direction;
+        self.update_viewmatrix();
+    }
+    fn turn_left(&mut self, angle: f32) {
+        self.turn_right(-angle);
+    }
+    fn turn_up(&mut self, angle: f32) {
+        let right = self.down_direction.cross(self.view_direction).normalized();
+        let rotation = Rotor3::from_angle_plane(angle, Bivec3::from_normalized_axis(right));
+        self.view_direction = rotation * self.view_direction;
+        self.down_direction = rotation * self.down_direction;
+        self.update_viewmatrix();
+    }
+    fn turn_down(&mut self, angle: f32) {
+        self.turn_up(-angle);
     }
 }
 
@@ -1194,6 +1352,9 @@ struct Aetna<V, I> {
     commandbuffers: Vec<vk::CommandBuffer>,
     allocator: vk_mem::Allocator,
     models: Vec<Model<V, I>>,
+    uniformbuffer: Buffer,
+    descriptor_pool: vk::DescriptorPool,
+    descriptor_sets: Vec<vk::DescriptorSet>,
 }
 
 impl Aetna<[f32; 3], InstanceData> {
@@ -1238,6 +1399,47 @@ impl Aetna<[f32; 3], InstanceData> {
         let commandbuffers =
             create_commandbuffers(&logical_device, &pools, swapchain.amount_of_images)?;
 
+        let mut uniformbuffer = Buffer::new(
+            &allocator,
+            64,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            vk_mem::MemoryUsage::CpuToGpu,
+        )?;
+        let cameratransform = Mat4::identity();
+        uniformbuffer.fill(&allocator, cameratransform.as_slice())?;
+        let pool_sizes = [vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: swapchain.amount_of_images,
+        }];
+        let descriptor_pool_info = vk::DescriptorPoolCreateInfo::builder()
+            .max_sets(swapchain.amount_of_images)
+            .pool_sizes(&pool_sizes);
+        let descriptor_pool =
+            unsafe { logical_device.create_descriptor_pool(&descriptor_pool_info, None) }?;
+
+        let desc_layouts =
+            vec![pipeline.descriptor_set_layouts[0]; swapchain.amount_of_images as usize];
+        let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo::builder()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&desc_layouts);
+        let descriptor_sets =
+            unsafe { logical_device.allocate_descriptor_sets(&descriptor_set_allocate_info) }?;
+
+        for (i, descset) in descriptor_sets.iter().enumerate() {
+            let buffer_infos = [vk::DescriptorBufferInfo {
+                buffer: uniformbuffer.buffer,
+                offset: 0,
+                range: 64,
+            }];
+            let desc_sets_write = [vk::WriteDescriptorSet::builder()
+                .dst_set(*descset)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&buffer_infos)
+                .build()];
+            unsafe { logical_device.update_descriptor_sets(&desc_sets_write, &[]) };
+        }
+
         Ok(Aetna {
             window,
             entry,
@@ -1257,6 +1459,9 @@ impl Aetna<[f32; 3], InstanceData> {
             commandbuffers,
             allocator,
             models: vec![],
+            uniformbuffer,
+            descriptor_pool,
+            descriptor_sets,
         })
     }
     fn update_commandbuffer(&mut self, index: usize) -> Result<(), vk::Result> {
@@ -1298,6 +1503,14 @@ impl Aetna<[f32; 3], InstanceData> {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.pipeline,
             );
+            self.device.cmd_bind_descriptor_sets(
+                commandbuffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.layout,
+                0,
+                &[self.descriptor_sets[index]],
+                &[],
+            );
             for m in &self.models {
                 m.draw(&self.device, commandbuffer);
             }
@@ -1314,6 +1527,11 @@ impl<V, I> Drop for Aetna<V, I> {
             self.device
                 .device_wait_idle()
                 .expect("Something went wrong while waiting.");
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.allocator
+                .destroy_buffer(self.uniformbuffer.buffer, &self.uniformbuffer.allocation)
+                .expect("Failed destroy uniform buffer");
             for m in &self.models {
                 if let Some(vb) = &m.vertexbuffer {
                     self.allocator

@@ -27,4 +27,7 @@ rayon = "1.4"
 shaderc = "0.6"
 
 [profile.release]
-lto = true
+lto = 'thin'
+
+[profile.dev.package.'*']
+opt-level = 3
