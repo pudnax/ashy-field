@@ -6,6 +6,8 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
+mod math;
+use math::*;
 mod utils;
 
 fn main() -> Result<()> {
@@ -613,12 +615,30 @@ impl Pipeline {
                 binding: 1,
                 location: 1,
                 offset: 0,
-                format: vk::Format::R32G32B32_SFLOAT,
+                format: vk::Format::R32G32B32A32_SFLOAT,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
                 location: 2,
-                offset: 12,
+                offset: 16,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 3,
+                offset: 32,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 4,
+                offset: 48,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 5,
+                offset: 64,
                 format: vk::Format::R32G32B32_SFLOAT,
             },
         ];
@@ -630,7 +650,7 @@ impl Pipeline {
             },
             vk::VertexInputBindingDescription {
                 binding: 1,
-                stride: 24,
+                stride: 76,
                 input_rate: vk::VertexInputRate::INSTANCE,
             },
         ];
@@ -875,7 +895,7 @@ impl std::error::Error for InvalidHandle {
 
 #[repr(C)]
 struct InstanceData {
-    position: [f32; 3],
+    position: Mat4,
     colour: [f32; 3],
 }
 
@@ -1065,62 +1085,43 @@ impl<V, I> Model<V, I> {
         }
     }
 }
+
+fn cube<I>() -> Model<[f32; 3], I> {
+    let lbf = [-1.0, 1.0, 0.0]; //lbf: left-bottom-front
+    let lbb = [-1.0, 1.0, 1.0];
+    let ltf = [-1.0, -1.0, 0.0];
+    let ltb = [-1.0, -1.0, 1.0];
+    let rbf = [1.0, 1.0, 0.0];
+    let rbb = [1.0, 1.0, 1.0];
+    let rtf = [1.0, -1.0, 0.0];
+    let rtb = [1.0, -1.0, 1.0];
+    Model {
+        vertexdata: vec![
+            lbf, lbb, rbb, lbf, rbb, rbf, //bottom
+            ltf, rtb, ltb, ltf, rtf, rtb, //top
+            lbf, rtf, ltf, lbf, rbf, rtf, //front
+            lbb, ltb, rtb, lbb, rtb, rbb, //back
+            lbf, ltf, lbb, lbb, ltf, ltb, //left
+            rbf, rbb, rtf, rbb, rtb, rtf, //right
+        ],
+        handle_to_index: std::collections::HashMap::new(),
+        handles: Vec::new(),
+        instances: Vec::new(),
+        first_invisible: 0,
+        next_handle: 0,
+        vertexbuffer: None,
+        instancebuffer: None,
+    }
+}
+
 impl Model<[f32; 3], [f32; 6]> {
     fn cube() -> Self {
-        let lbf = [-0.1, 0.1, 0.0]; //lbf: left-bottom-front
-        let lbb = [-0.1, 0.1, 0.1];
-        let ltf = [-0.1, -0.1, 0.0];
-        let ltb = [-0.1, -0.1, 0.1];
-        let rbf = [0.1, 0.1, 0.0];
-        let rbb = [0.1, 0.1, 0.1];
-        let rtf = [0.1, -0.1, 0.0];
-        let rtb = [0.1, -0.1, 0.1];
-        Model {
-            vertexdata: vec![
-                lbf, lbb, rbb, lbf, rbb, rbf, //bottom
-                ltf, rtb, ltb, ltf, rtf, rtb, //top
-                lbf, rtf, ltf, lbf, rbf, rtf, //front
-                lbb, ltb, rtb, lbb, rtb, rbb, //back
-                lbf, ltf, lbb, lbb, ltf, ltb, //left
-                rbf, rbb, rtf, rbb, rtb, rtf, //right
-            ],
-            handle_to_index: std::collections::HashMap::new(),
-            handles: Vec::new(),
-            instances: Vec::new(),
-            first_invisible: 0,
-            next_handle: 0,
-            vertexbuffer: None,
-            instancebuffer: None,
-        }
+        cube()
     }
 }
 impl Model<[f32; 3], InstanceData> {
     fn cube() -> Self {
-        let lbf = [-0.1, 0.1, 0.0]; //lbf: left-bottom-front
-        let lbb = [-0.1, 0.1, 0.1];
-        let ltf = [-0.1, -0.1, 0.0];
-        let ltb = [-0.1, -0.1, 0.1];
-        let rbf = [0.1, 0.1, 0.0];
-        let rbb = [0.1, 0.1, 0.1];
-        let rtf = [0.1, -0.1, 0.0];
-        let rtb = [0.1, -0.1, 0.1];
-        Model {
-            vertexdata: vec![
-                lbf, lbb, rbb, lbf, rbb, rbf, //bottom
-                ltf, rtb, ltb, ltf, rtf, rtb, //top
-                lbf, rtf, ltf, lbf, rbf, rtf, //front
-                lbb, ltb, rtb, lbb, rtb, rbb, //back
-                lbf, ltf, lbb, lbb, ltf, ltb, //left
-                rbf, rbb, rtf, rbb, rtb, rtf, //right
-            ],
-            handle_to_index: std::collections::HashMap::new(),
-            handles: Vec::new(),
-            instances: Vec::new(),
-            first_invisible: 0,
-            next_handle: 0,
-            vertexbuffer: None,
-            instancebuffer: None,
-        }
+        cube()
     }
 }
 
@@ -1190,15 +1191,17 @@ impl Aetna<[f32; 3], InstanceData> {
         let allocator = vk_mem::Allocator::new(&allocator_create_info)?;
         let mut cube = Model::<[f32; 3], InstanceData>::cube();
         cube.insert_visibly(InstanceData {
-            position: [0.0, 0.0, 0.0],
+            position: Mat4::from_scale(0.1),
             colour: [1.0, 0.0, 0.0],
         });
         cube.insert_visibly(InstanceData {
-            position: [0.0, 0.25, 0.0],
+            position: Mat4::from_translation((0.0, 0.25, 0.0).into()) * Mat4::from_scale(0.1),
             colour: [0.6, 0.5, 0.0],
         });
         cube.insert_visibly(InstanceData {
-            position: [0.0, 0.5, 0.0],
+            position: Mat4::from_angle_plane(std::f32::consts::FRAC_PI_3, Bivec3::new(0., 0., 1.))
+                * Mat4::from_translation((0.0, 0.5, 0.0).into())
+                * Mat4::from_scale(0.1),
             colour: [0.0, 0.5, 0.0],
         });
 
