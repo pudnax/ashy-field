@@ -15,6 +15,17 @@ fn main() -> Result<()> {
     let eventloop = EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
     let mut aetna = Aetna::init(window)?;
+    let mut cube = Model::<_, InstanceData>::cube();
+    let mut angle = 0.2;
+    let my_special_cube = cube.insert_visibly(InstanceData {
+        modelmatrix: (Mat4::from_angle_plane(angle, Bivec3::unit_xy())
+            * Mat4::from_translation((0.0, 0.5, 0.0).into()))
+            * Mat4::from_scale(0.1),
+        colour: [0.5, 0.5, 0.2],
+    });
+    cube.update_vertexbuffer(&aetna.allocator);
+    cube.update_instancebuffer(&aetna.allocator);
+    aetna.models = vec![cube];
     eventloop.run(move |event, _, controlflow| match event {
         Event::WindowEvent { ref event, .. } => match event {
             WindowEvent::CloseRequested
@@ -33,6 +44,14 @@ fn main() -> Result<()> {
         },
 
         Event::MainEventsCleared => {
+            angle += 0.01;
+            aetna.models[0]
+                .get_mut(my_special_cube)
+                .unwrap()
+                .modelmatrix = (Mat4::from_angle_plane(angle, Bivec3::unit_xy())
+                * Mat4::from_translation((0.0, 0.5, 0.0).into()))
+                * Mat4::from_scale(0.1);
+
             aetna.window.request_redraw();
         }
         Event::RedrawRequested(_) => {
@@ -64,6 +83,12 @@ fn main() -> Result<()> {
                     ])
                     .expect("resetting fences");
             }
+            for m in &mut aetna.models {
+                m.update_instancebuffer(&aetna.allocator);
+            }
+            aetna
+                .update_commandbuffer(image_index as usize)
+                .expect("updating the command buffer");
             let semaphores_available =
                 [aetna.swapchain.image_available[aetna.swapchain.current_image]];
             let waiting_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
@@ -418,7 +443,7 @@ impl SwapchainDongXi {
         logical_device: &ash::Device,
         surfaces: &SurfaceDongXi,
         queue_families: &QueueFamilies,
-        queues: &Queues,
+        // queues: &Queues,
         allocator: &vk_mem::Allocator,
     ) -> Result<SwapchainDongXi> {
         let surface_capabilities = surfaces.get_capabilities(physical_device)?;
@@ -498,6 +523,7 @@ impl SwapchainDongXi {
             .subresource_range(*subresource_range);
         let depth_imageview =
             unsafe { logical_device.create_image_view(&imageview_create_info, None) }?;
+
         let mut image_available = vec![];
         let mut rendering_finished = vec![];
         let mut may_begin_drawing = vec![];
@@ -844,61 +870,6 @@ fn create_commandbuffers(
     unsafe { logical_device.allocate_command_buffers(&commandbuf_allocate_info) }
 }
 
-fn fill_commandbuffers<V, I>(
-    commandbuffers: &[vk::CommandBuffer],
-    logical_device: &ash::Device,
-    renderpass: &vk::RenderPass,
-    swapchain: &SwapchainDongXi,
-    pipeline: &Pipeline,
-    models: &[Model<V, I>],
-) -> Result<(), vk::Result> {
-    for (i, &commandbuffer) in commandbuffers.iter().enumerate() {
-        let commandbuffer_begininfo = vk::CommandBufferBeginInfo::builder();
-        unsafe {
-            logical_device.begin_command_buffer(commandbuffer, &commandbuffer_begininfo)?;
-        }
-        let clearvalues = [
-            vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.08, 1.0],
-                },
-            },
-            vk::ClearValue {
-                depth_stencil: vk::ClearDepthStencilValue {
-                    depth: 1.0,
-                    stencil: 0,
-                },
-            },
-        ];
-        let renderpass_begininfo = vk::RenderPassBeginInfo::builder()
-            .render_pass(*renderpass)
-            .framebuffer(swapchain.framebuffers[i])
-            .render_area(vk::Rect2D {
-                offset: vk::Offset2D { x: 0, y: 0 },
-                extent: swapchain.extent,
-            })
-            .clear_values(&clearvalues);
-        unsafe {
-            logical_device.cmd_begin_render_pass(
-                commandbuffer,
-                &renderpass_begininfo,
-                vk::SubpassContents::INLINE,
-            );
-            logical_device.cmd_bind_pipeline(
-                commandbuffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                pipeline.pipeline,
-            );
-            for m in models {
-                m.draw(logical_device, commandbuffer);
-            }
-            logical_device.cmd_end_render_pass(commandbuffer);
-            logical_device.end_command_buffer(commandbuffer)?;
-        }
-    }
-    Ok(())
-}
-
 struct Buffer {
     buffer: vk::Buffer,
     allocation: vk_mem::Allocation,
@@ -942,7 +913,7 @@ impl Buffer {
     ) -> Result<(), vk_mem::error::Error> {
         let bytes_to_write = (data.len() * std::mem::size_of::<T>()) as u64;
         if bytes_to_write > self.size_in_bytes {
-            allocator.destroy_buffer(self.buffer, &self.allocation);
+            allocator.destroy_buffer(self.buffer, &self.allocation)?;
             let newbuffer = Buffer::new(
                 allocator,
                 bytes_to_write,
@@ -972,7 +943,7 @@ impl std::error::Error for InvalidHandle {
 
 #[repr(C)]
 struct InstanceData {
-    position: Mat4,
+    modelmatrix: Mat4,
     colour: [f32; 3],
 }
 
@@ -1257,7 +1228,6 @@ impl Aetna<[f32; 3], InstanceData> {
             &logical_device,
             &surfaces,
             &queue_families,
-            &queues,
             &allocator,
         )?;
         let renderpass = init_renderpass(&logical_device, swapchain.surface_format.format)?;
@@ -1265,36 +1235,8 @@ impl Aetna<[f32; 3], InstanceData> {
         let pipeline = Pipeline::init(&logical_device, &swapchain, &renderpass)?;
         let pools = Pools::init(&logical_device, &queue_families)?;
 
-        let mut cube = Model::<[f32; 3], InstanceData>::cube();
-        cube.insert_visibly(InstanceData {
-            position: Mat4::from_scale(0.1),
-            colour: [1.0, 0.0, 0.0],
-        });
-        cube.insert_visibly(InstanceData {
-            position: Mat4::from_translation((0.0, 0.25, 0.0).into()) * Mat4::from_scale(0.1),
-            colour: [0.6, 0.5, 0.0],
-        });
-        cube.insert_visibly(InstanceData {
-            position: Mat4::from_angle_plane(std::f32::consts::FRAC_PI_3, Bivec3::new(0., 0., 1.))
-                * Mat4::from_translation((0.0, 0.5, 0.0).into())
-                * Mat4::from_scale(0.1),
-            colour: [0.0, 0.5, 0.0],
-        });
-
-        cube.update_vertexbuffer(&allocator)?;
-        cube.update_instancebuffer(&allocator)?;
-        let models = vec![cube];
-
         let commandbuffers =
             create_commandbuffers(&logical_device, &pools, swapchain.amount_of_images)?;
-        fill_commandbuffers(
-            &commandbuffers,
-            &logical_device,
-            &renderpass,
-            &swapchain,
-            &pipeline,
-            &models,
-        )?;
 
         Ok(Aetna {
             window,
@@ -1314,8 +1256,55 @@ impl Aetna<[f32; 3], InstanceData> {
             pools,
             commandbuffers,
             allocator,
-            models,
+            models: vec![],
         })
+    }
+    fn update_commandbuffer(&mut self, index: usize) -> Result<(), vk::Result> {
+        let commandbuffer = self.commandbuffers[index];
+        let commandbuffer_begininfo = vk::CommandBufferBeginInfo::builder();
+        unsafe {
+            self.device
+                .begin_command_buffer(commandbuffer, &commandbuffer_begininfo)?;
+        }
+        let clearvalues = [
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.08, 1.0],
+                },
+            },
+            vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
+                },
+            },
+        ];
+        let renderpass_begininfo = vk::RenderPassBeginInfo::builder()
+            .render_pass(self.renderpass)
+            .framebuffer(self.swapchain.framebuffers[index])
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: self.swapchain.extent,
+            })
+            .clear_values(&clearvalues);
+        unsafe {
+            self.device.cmd_begin_render_pass(
+                commandbuffer,
+                &renderpass_begininfo,
+                vk::SubpassContents::INLINE,
+            );
+            self.device.cmd_bind_pipeline(
+                commandbuffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.pipeline,
+            );
+            for m in &self.models {
+                m.draw(&self.device, commandbuffer);
+            }
+            self.device.cmd_end_render_pass(commandbuffer);
+            self.device.end_command_buffer(commandbuffer)?;
+        }
+        Ok(())
     }
 }
 
