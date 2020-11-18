@@ -1476,7 +1476,7 @@ impl Camera {
     }
 }
 
-// TODO: Rethink about the order of poles in the struct for 'right' drop order
+// TODO(#3): Rethink about the order of poles in the struct for 'right' drop order
 // to remove ManualDrop
 struct Aetna<V, I> {
     window: winit::window::Window,
