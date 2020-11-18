@@ -140,6 +140,21 @@ fn main() -> Result<()> {
         Event::MainEventsCleared => {
             aetna.window.request_redraw();
         }
+        Event::WindowEvent {
+            event: WindowEvent::Resized(new_size),
+            ..
+        } => {
+            aetna
+                .recreate_swapchain(new_size.width, new_size.height)
+                .expect("Failed recreate swapchain.");
+            // camera.set_aspect(
+            //     aetna.swapchain.extent.width as f32 / aetna.swapchain.extent.height as f32,
+            // );
+            // camera
+            //     .update_buffer(&aetna.allocator, &mut aetna.uniformbuffer)
+            //     .expect("camera buffer update");
+        }
+
         Event::RedrawRequested(_) => {
             let (image_index, _) = unsafe {
                 aetna
@@ -208,11 +223,26 @@ fn main() -> Result<()> {
                 .swapchains(&swapchains)
                 .image_indices(&indices);
             unsafe {
-                aetna
+                match aetna
                     .swapchain
                     .swapchain_loader
                     .queue_present(aetna.queues.graphics_queue, &present_info)
-                    .expect("queue presentation");
+                {
+                    Ok(..) => {}
+                    Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                        aetna
+                            .recreate_swapchain(0, 0)
+                            .expect("Failed recreate swapchain.");
+                        camera.set_aspect(
+                            aetna.swapchain.extent.width as f32
+                                / aetna.swapchain.extent.height as f32,
+                        );
+                        camera
+                            .update_buffer(&aetna.allocator, &mut aetna.uniformbuffer)
+                            .expect("camera buffer update");
+                    }
+                    _ => panic!("Unhandled queue presentation error."),
+                }
             };
             aetna.swapchain.current_image =
                 (aetna.swapchain.current_image + 1) % aetna.swapchain.amount_of_images as usize;

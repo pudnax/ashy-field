@@ -177,4 +177,8 @@ impl Camera {
     pub fn turn_down(&mut self, angle: f32) {
         self.turn_up(-angle);
     }
+    pub fn set_aspect(&mut self, aspect: f32) {
+        self.aspect = aspect;
+        self.update_projectionmatrix();
+    }
 }
