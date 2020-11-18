@@ -212,7 +212,7 @@ fn main() -> Result<()> {
     });
 }
 
-// TODO: Reshape validation mesage
+// TODO(#1): Reshape validation mesage
 unsafe extern "system" fn vulkan_debug_utils_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     message_type: vk::DebugUtilsMessageTypeFlagsEXT,
