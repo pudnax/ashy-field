@@ -1,11 +1,6 @@
-pub(crate) type Vec2 = ultraviolet::Vec2;
-pub(crate) type Vec3 = ultraviolet::Vec3;
-pub(crate) type Vec4 = ultraviolet::Vec4;
 pub(crate) type Mat4 = ultraviolet::Mat4;
 pub(crate) type Mat3 = ultraviolet::Mat4;
 pub(crate) type Mat2 = ultraviolet::Mat4;
-pub(crate) type Bivec3 = ultraviolet::Bivec3;
-pub(crate) type Rotor3 = ultraviolet::Rotor3;
 
 pub struct PrettyM4<'a>(&'a Mat4);
 
