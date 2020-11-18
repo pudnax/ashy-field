@@ -26,7 +26,7 @@ pub struct Aetna<V, I> {
     instance: ash::Instance,
     debug: std::mem::ManuallyDrop<DebugDongXi>,
     surfaces: std::mem::ManuallyDrop<SurfaceDongXi>,
-    _physical_device: vk::PhysicalDevice,
+    physical_device: vk::PhysicalDevice,
     _physical_device_properties: vk::PhysicalDeviceProperties,
     _physical_device_features: vk::PhysicalDeviceFeatures,
     pub queue_families: QueueFamilies,
@@ -136,7 +136,7 @@ impl Aetna<[f32; 3], InstanceData> {
             instance,
             debug: std::mem::ManuallyDrop::new(debug),
             surfaces: std::mem::ManuallyDrop::new(surfaces),
-            _physical_device: physical_device,
+            physical_device,
             _physical_device_properties: physical_device_properties,
             _physical_device_features: physical_device_features,
             queue_families,
@@ -153,6 +153,31 @@ impl Aetna<[f32; 3], InstanceData> {
             descriptor_pool,
             descriptor_sets,
         })
+    }
+    // TODO(#4): Still have validation errors on validation.
+    pub fn recreate_swapchain(&mut self, width: u32, height: u32) -> Result<()> {
+        let _extent2d = vk::Extent2D { width, height };
+        unsafe {
+            self.device
+                .device_wait_idle()
+                .expect("something wrong while waiting");
+        }
+        unsafe {
+            self.swapchain.cleanup(&self.device, &self.allocator);
+        }
+        self.swapchain = SwapchainDongXi::init(
+            &self.instance,
+            self.physical_device,
+            &self.device,
+            &self.surfaces,
+            &self.queue_families,
+            &self.allocator,
+        )?;
+        self.swapchain
+            .create_framebuffers(&self.device, self.renderpass)?;
+        self.pipeline.cleanup(&self.device);
+        self.pipeline = Pipeline::init(&self.device, &self.swapchain, &self.renderpass)?;
+        Ok(())
     }
     pub fn update_commandbuffer(&mut self, index: usize) -> Result<(), vk::Result> {
         let commandbuffer = self.commandbuffers[index];
