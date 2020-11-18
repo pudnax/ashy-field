@@ -7,6 +7,8 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
 };
 
+use nalgebra as na;
+
 mod math;
 use math::*;
 mod angle;
@@ -19,54 +21,68 @@ fn main() -> Result<()> {
     let mut aetna = Aetna::init(window)?;
     let mut cube = Model::<_, InstanceData>::cube();
     cube.insert_visibly(InstanceData {
-        modelmatrix: Mat4::from_translation((0.0, 0.0, 0.1).into()) * Mat4::from_scale(0.1),
-        colour: [0.2, 0.2, 1.0],
+        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.0, 0.0, 0.1))
+            * na::Matrix4::new_scaling(0.1))
+        .into(),
+        colour: [0.2, 0.4, 1.0],
     });
     cube.insert_visibly(InstanceData {
-        modelmatrix: Mat4::from_translation((0.05, 0.05, 0.0).into()) * Mat4::from_scale(0.1),
-        colour: [0.9, 0.2, 0.2],
+        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.05, 0.05, 0.0))
+            * na::Matrix4::new_scaling(0.1))
+        .into(),
+        colour: [1.0, 1.0, 0.2],
     });
     for i in 0..10 {
         for j in 0..10 {
             cube.insert_visibly(InstanceData {
-                modelmatrix: Mat4::from_translation(
-                    (i as f32 * 0.2 - 1.0, j as f32 * 0.1 - 1.0, 0.5).into(),
-                ) * Mat4::from_scale(0.3),
-                colour: [0.9, i as f32 * 0.09, j as f32 * 0.02],
+                modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(
+                    i as f32 * 0.2 - 1.0,
+                    j as f32 * 0.2 - 1.0,
+                    0.5,
+                )) * na::Matrix4::new_scaling(0.03))
+                .into(),
+                colour: [1.0, i as f32 * 0.07, j as f32 * 0.07],
             });
             cube.insert_visibly(InstanceData {
-                modelmatrix: Mat4::from_translation(
-                    (i as f32 * 0.2 - 1.0, 0.0, j as f32 * 0.2 - 1.0).into(),
-                ) * Mat4::from_scale(0.2),
-                colour: [i as f32 * 0.02, j as f32 * 0.09, 1.0],
+                modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(
+                    i as f32 * 0.2 - 1.0,
+                    0.0,
+                    j as f32 * 0.2 - 1.0,
+                )) * na::Matrix4::new_scaling(0.02))
+                .into(),
+                colour: [i as f32 * 0.07, j as f32 * 0.07, 1.0],
             });
         }
     }
     cube.insert_visibly(InstanceData {
-        modelmatrix: (Mat4::from_angle_plane(
-            0.0,
-            Bivec3::from_normalized_axis(Vec3::new(0.0, 0.0, 1.4).normalized()),
-        ) * Mat4::from_translation((0.0, 0.5, 0.0).into()))
-            * Mat4::from_scale(0.1),
-        colour: [0.2, 0.5, 0.0],
+        modelmatrix: (na::Matrix4::from_scaled_axis(na::Vector3::new(0.0, 0.0, 1.4))
+            * na::Matrix4::new_translation(&na::Vector3::new(0.0, 0.5, 0.0))
+            * na::Matrix4::new_scaling(0.1))
+        .into(),
+        colour: [0.0, 0.5, 0.0],
     });
     cube.insert_visibly(InstanceData {
-        modelmatrix: Mat4::from_translation((0.5, 0.0, 0.0).into())
-            * Mat4::from_nonuniform_scale((0.5, 0.01, 0.01).into()),
+        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.5, 0.0, 0.0))
+            * na::Matrix4::new_nonuniform_scaling(&na::Vector3::new(0.5, 0.01, 0.01)))
+        .into(),
         colour: [1.0, 0.5, 0.5],
     });
     cube.insert_visibly(InstanceData {
-        modelmatrix: Mat4::from_translation((0.0, 0.5, 0.0).into())
-            * Mat4::from_nonuniform_scale((0.01, 0.5, 0.01).into()),
+        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.0, 0.5, 0.0))
+            * na::Matrix4::new_nonuniform_scaling(&na::Vector3::new(0.01, 0.5, 0.01)))
+        .into(),
         colour: [0.5, 1.0, 0.5],
     });
+
     cube.insert_visibly(InstanceData {
-        modelmatrix: Mat4::from_translation((0.0, 0.0, 0.0).into())
-            * Mat4::from_nonuniform_scale((0.01, 0.01, 0.5).into()),
+        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.0, 0.0, 0.0))
+            * na::Matrix4::new_nonuniform_scaling(&na::Vector3::new(0.01, 0.01, 0.5)))
+        .into(),
         colour: [0.5, 0.5, 1.0],
     });
-    cube.update_vertexbuffer(&aetna.allocator)?;
-    cube.update_instancebuffer(&aetna.allocator)?;
+    cube.update_vertexbuffer(&aetna.allocator);
+    cube.update_indexbuffer(&aetna.allocator);
+    cube.update_instancebuffer(&aetna.allocator);
     aetna.models = vec![cube];
     let mut camera = Camera::builder().build();
 
@@ -146,9 +162,7 @@ fn main() -> Result<()> {
                     ])
                     .expect("resetting fences");
             }
-            camera
-                .update_buffer(&aetna.allocator, &mut aetna.uniformbuffer)
-                .expect("Failed update camera buffer.");
+            camera.update_buffer(&aetna.allocator, &mut aetna.uniformbuffer);
             for m in &mut aetna.models {
                 m.update_instancebuffer(&aetna.allocator)
                     .expect("Failed update instance buffer");
@@ -198,6 +212,7 @@ fn main() -> Result<()> {
     });
 }
 
+// TODO: Reshape validation mesage
 unsafe extern "system" fn vulkan_debug_utils_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     message_type: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -510,7 +525,6 @@ impl SwapchainDongXi {
         logical_device: &ash::Device,
         surfaces: &SurfaceDongXi,
         queue_families: &QueueFamilies,
-        // queues: &Queues,
         allocator: &vk_mem::Allocator,
     ) -> Result<SwapchainDongXi> {
         let surface_capabilities = surfaces.get_capabilities(physical_device)?;
@@ -1027,12 +1041,14 @@ impl std::error::Error for InvalidHandle {
 
 struct Model<V, I> {
     vertexdata: Vec<V>,
+    indexdata: Vec<u32>,
     handle_to_index: std::collections::HashMap<usize, usize>,
     handles: Vec<usize>,
     instances: Vec<I>,
     first_invisible: usize,
     next_handle: usize,
     vertexbuffer: Option<Buffer>,
+    indexbuffer: Option<Buffer>,
     instancebuffer: Option<Buffer>,
 }
 impl<V, I> Model<V, I> {
@@ -1161,6 +1177,26 @@ impl<V, I> Model<V, I> {
             Ok(())
         }
     }
+    fn update_indexbuffer(
+        &mut self,
+        allocator: &vk_mem::Allocator,
+    ) -> Result<(), vk_mem::error::Error> {
+        if let Some(buffer) = &mut self.indexbuffer {
+            buffer.fill(allocator, &self.indexdata)?;
+            Ok(())
+        } else {
+            let bytes = (self.indexdata.len() * std::mem::size_of::<u32>()) as u64;
+            let mut buffer = Buffer::new(
+                &allocator,
+                bytes,
+                vk::BufferUsageFlags::INDEX_BUFFER,
+                vk_mem::MemoryUsage::CpuToGpu,
+            )?;
+            buffer.fill(allocator, &self.indexdata)?;
+            self.indexbuffer = Some(buffer);
+            Ok(())
+        }
+    }
     fn update_instancebuffer(
         &mut self,
         allocator: &vk_mem::Allocator,
@@ -1183,28 +1219,37 @@ impl<V, I> Model<V, I> {
     }
     fn draw(&self, logical_device: &ash::Device, commandbuffer: vk::CommandBuffer) {
         if let Some(vertexbuffer) = &self.vertexbuffer {
-            if let Some(instancebuffer) = &self.instancebuffer {
-                if self.first_invisible > 0 {
-                    unsafe {
-                        logical_device.cmd_bind_vertex_buffers(
-                            commandbuffer,
-                            0,
-                            &[vertexbuffer.buffer],
-                            &[0],
-                        );
-                        logical_device.cmd_bind_vertex_buffers(
-                            commandbuffer,
-                            1,
-                            &[instancebuffer.buffer],
-                            &[0],
-                        );
-                        logical_device.cmd_draw(
-                            commandbuffer,
-                            self.vertexdata.len() as u32,
-                            self.first_invisible as u32,
-                            0,
-                            0,
-                        );
+            if let Some(indexbuffer) = &self.indexbuffer {
+                if let Some(instancebuffer) = &self.instancebuffer {
+                    if self.first_invisible > 0 {
+                        unsafe {
+                            logical_device.cmd_bind_vertex_buffers(
+                                commandbuffer,
+                                0,
+                                &[vertexbuffer.buffer],
+                                &[0],
+                            );
+                            logical_device.cmd_bind_vertex_buffers(
+                                commandbuffer,
+                                1,
+                                &[instancebuffer.buffer],
+                                &[0],
+                            );
+                            logical_device.cmd_bind_index_buffer(
+                                commandbuffer,
+                                indexbuffer.buffer,
+                                0,
+                                vk::IndexType::UINT32,
+                            );
+                            logical_device.cmd_draw_indexed(
+                                commandbuffer,
+                                self.indexdata.len() as u32,
+                                self.first_invisible as u32,
+                                0,
+                                0,
+                                0,
+                            );
+                        }
                     }
                 }
             }
@@ -1213,22 +1258,23 @@ impl<V, I> Model<V, I> {
 }
 
 fn cube<I>() -> Model<[f32; 3], I> {
-    let lbf = [-1.0, 1.0, 0.0]; //lbf: left-bottom-front
+    let lbf = [-1.0, 1.0, -1.0]; //lbf: left-bottom-front
     let lbb = [-1.0, 1.0, 1.0];
-    let ltf = [-1.0, -1.0, 0.0];
+    let ltf = [-1.0, -1.0, -1.0];
     let ltb = [-1.0, -1.0, 1.0];
-    let rbf = [1.0, 1.0, 0.0];
+    let rbf = [1.0, 1.0, -1.0];
     let rbb = [1.0, 1.0, 1.0];
-    let rtf = [1.0, -1.0, 0.0];
+    let rtf = [1.0, -1.0, -1.0];
     let rtb = [1.0, -1.0, 1.0];
     Model {
-        vertexdata: vec![
-            lbf, lbb, rbb, lbf, rbb, rbf, //bottom
-            ltf, rtb, ltb, ltf, rtf, rtb, //top
-            lbf, rtf, ltf, lbf, rbf, rtf, //front
-            lbb, ltb, rtb, lbb, rtb, rbb, //back
-            lbf, ltf, lbb, lbb, ltf, ltb, //left
-            rbf, rbb, rtf, rbb, rtb, rtf, //right
+        vertexdata: vec![lbf, lbb, ltf, ltb, rbf, rbb, rtf, rtb],
+        indexdata: vec![
+            0, 1, 5, 0, 5, 4, //bottom
+            2, 7, 3, 2, 6, 7, //top
+            0, 6, 2, 0, 4, 6, //front
+            1, 3, 7, 1, 7, 5, //back
+            0, 2, 1, 1, 2, 3, //left
+            4, 5, 6, 5, 7, 6, //right
         ],
         handle_to_index: std::collections::HashMap::new(),
         handles: Vec::new(),
@@ -1236,13 +1282,14 @@ fn cube<I>() -> Model<[f32; 3], I> {
         first_invisible: 0,
         next_handle: 0,
         vertexbuffer: None,
+        indexbuffer: None,
         instancebuffer: None,
     }
 }
 
 #[repr(C)]
 struct InstanceData {
-    modelmatrix: Mat4,
+    modelmatrix: [[f32; 4]; 4],
     colour: [f32; 3],
 }
 
@@ -1258,27 +1305,25 @@ impl Model<[f32; 3], InstanceData> {
 }
 
 struct Camera {
-    viewmatrix: Mat4,
-    position: Vec3,
-    view_direction: Vec3,
-    down_direction: Vec3,
+    viewmatrix: na::Matrix4<f32>,
+    position: na::Vector3<f32>,
+    view_direction: na::Unit<na::Vector3<f32>>,
+    down_direction: na::Unit<na::Vector3<f32>>,
     fovy: f32,
     aspect: f32,
     near: f32,
     far: f32,
-    projectionmatrix: Mat4,
+    projectionmatrix: na::Matrix4<f32>,
 }
-
 struct CameraBuilder {
-    position: Vec3,
-    view_direction: Vec3,
-    down_direction: Vec3,
+    position: na::Vector3<f32>,
+    view_direction: na::Unit<na::Vector3<f32>>,
+    down_direction: na::Unit<na::Vector3<f32>>,
     fovy: f32,
     aspect: f32,
     near: f32,
     far: f32,
 }
-
 impl CameraBuilder {
     fn build(self) -> Camera {
         if self.far < self.near {
@@ -1290,23 +1335,26 @@ impl CameraBuilder {
         let mut cam = Camera {
             position: self.position,
             view_direction: self.view_direction,
-            down_direction: (self
-                .down_direction
-                .map(|v| v - self.down_direction.dot(self.view_direction)))
-            .normalized()
-                * self.view_direction,
+            down_direction: na::Unit::new_normalize(
+                self.down_direction.as_ref()
+                    - self
+                        .down_direction
+                        .as_ref()
+                        .dot(self.view_direction.as_ref())
+                        * self.view_direction.as_ref(),
+            ),
             fovy: self.fovy,
             aspect: self.aspect,
             near: self.near,
             far: self.far,
-            viewmatrix: Mat4::identity(),
-            projectionmatrix: Mat4::identity(),
+            viewmatrix: na::Matrix4::identity(),
+            projectionmatrix: na::Matrix4::identity(),
         };
         cam.update_projectionmatrix();
         cam.update_viewmatrix();
         cam
     }
-    fn position(mut self, pos: Vec3) -> CameraBuilder {
+    fn position(mut self, pos: na::Vector3<f32>) -> CameraBuilder {
         self.position = pos;
         self
     }
@@ -1332,84 +1380,84 @@ impl CameraBuilder {
         self.far = far;
         self
     }
-    fn view_direction(mut self, direction: Vec3) -> CameraBuilder {
-        self.view_direction = direction.normalized();
+    // TODO: Do nothing if vector is already normalized
+    fn view_direction(mut self, direction: na::Vector3<f32>) -> CameraBuilder {
+        self.view_direction = na::Unit::new_normalize(direction);
         self
     }
-    fn down_direction(mut self, direction: Vec3) -> CameraBuilder {
-        self.down_direction = direction.normalized();
+    fn down_direction(mut self, direction: na::Vector3<f32>) -> CameraBuilder {
+        self.down_direction = na::Unit::new_normalize(direction);
         self
     }
 }
-
 impl Camera {
     fn builder() -> CameraBuilder {
         CameraBuilder {
-            position: Vec3::new(-3.0, -3.0, -3.0),
-            view_direction: Vec3::new(1.0, 1.0, 1.0).normalized(),
-            down_direction: Vec3::new(-1.0, 2.0, -1.0).normalized(),
+            position: na::Vector3::new(-3.0, -3.0, -3.0),
+            view_direction: na::Unit::new_normalize(na::Vector3::new(0.0, 1.0, 1.0)),
+            down_direction: na::Unit::new_normalize(na::Vector3::new(0.0, 1.0, -1.0)),
             fovy: std::f32::consts::FRAC_PI_3,
             aspect: 800.0 / 600.0,
             near: 0.1,
             far: 100.0,
         }
     }
-    fn update_buffer(
-        &self,
-        allocator: &vk_mem::Allocator,
-        buffer: &mut Buffer,
-    ) -> Result<(), vk_mem::error::Error> {
-        buffer.fill(
-            allocator,
-            &[self.viewmatrix.as_slice(), self.projectionmatrix.as_slice()],
-        )?;
-        Ok(())
-    }
-    fn update_viewmatrix(&mut self) {
-        let right = self.down_direction.cross(self.view_direction).normalized();
-        let m = Mat4::new(
-            Vec4::new(right.x, right.y, right.z, -right.dot(self.position)),
-            Vec4::new(
-                self.down_direction.x,
-                self.down_direction.y,
-                self.down_direction.z,
-                -self.down_direction.dot(self.position),
-            ),
-            Vec4::new(
-                self.view_direction.x,
-                self.view_direction.y,
-                self.view_direction.z,
-                -self.view_direction.dot(self.position),
-            ),
-            Vec4::new(0.0, 0.0, 0.0, 1.0),
-        );
-        self.viewmatrix = m;
-    }
     fn update_projectionmatrix(&mut self) {
         let d = 1.0 / (0.5 * self.fovy).tan();
-        self.projectionmatrix = Mat4::new(
-            [d / self.aspect, 0.0, 0.0, 0.0].into(),
-            [0.0, d, 0.0, 0.0].into(),
-            [
-                0.0,
-                0.0,
-                self.far / (self.far - self.near),
-                -self.near * self.far / (self.far - self.near),
-            ]
-            .into(),
-            [0.0, 0.0, 1.0, 0.0].into(),
-        )
+        self.projectionmatrix = na::Matrix4::new(
+            d / self.aspect,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            d,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            self.far / (self.far - self.near),
+            -self.near * self.far / (self.far - self.near),
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+        );
+    }
+    fn update_buffer(&self, allocator: &vk_mem::Allocator, buffer: &mut Buffer) {
+        let data: [[[f32; 4]; 4]; 2] = [self.viewmatrix.into(), self.projectionmatrix.into()];
+        buffer.fill(allocator, &data);
+    }
+    fn update_viewmatrix(&mut self) {
+        let right = na::Unit::new_normalize(self.down_direction.cross(&self.view_direction));
+        let m = na::Matrix4::new(
+            right.x,
+            right.y,
+            right.z,
+            -right.dot(&self.position), //
+            self.down_direction.x,
+            self.down_direction.y,
+            self.down_direction.z,
+            -self.down_direction.dot(&self.position), //
+            self.view_direction.x,
+            self.view_direction.y,
+            self.view_direction.z,
+            -self.view_direction.dot(&self.position), //
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+        self.viewmatrix = self.projectionmatrix * m;
     }
     fn move_forward(&mut self, distance: f32) {
-        self.position += distance * self.view_direction;
+        self.position += distance * self.view_direction.as_ref();
         self.update_viewmatrix();
     }
     fn move_backward(&mut self, distance: f32) {
         self.move_forward(-distance);
     }
     fn turn_right(&mut self, angle: f32) {
-        let rotation =
-            Rotor3::from_angle_plane(angle, Bivec3::from_normalized_axis(self.down_direction));
+        let rotation = na::Rotation3::from_axis_angle(&self.down_direction, angle);
         self.view_direction = rotation * self.view_direction;
         self.update_viewmatrix();
     }
@@ -1417,8 +1465,8 @@ impl Camera {
         self.turn_right(-angle);
     }
     fn turn_up(&mut self, angle: f32) {
-        let right = self.down_direction.cross(self.view_direction).normalized();
-        let rotation = Rotor3::from_angle_plane(angle, Bivec3::from_normalized_axis(right));
+        let right = na::Unit::new_normalize(self.down_direction.cross(&self.view_direction));
+        let rotation = na::Rotation3::from_axis_angle(&right, angle);
         self.view_direction = rotation * self.view_direction;
         self.down_direction = rotation * self.down_direction;
         self.update_viewmatrix();
@@ -1498,11 +1546,14 @@ impl Aetna<[f32; 3], InstanceData> {
 
         let mut uniformbuffer = Buffer::new(
             &allocator,
-            128,
+            64,
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             vk_mem::MemoryUsage::CpuToGpu,
         )?;
-        let cameratransforms = [Mat4::identity().as_slice(), Mat4::identity().as_slice()].concat();
+        let cameratransforms: [[[f32; 4]; 4]; 2] = [
+            na::Matrix4::identity().into(),
+            na::Matrix4::identity().into(),
+        ];
         uniformbuffer.fill(&allocator, &cameratransforms)?;
         let pool_sizes = [vk::DescriptorPoolSize {
             ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -1639,6 +1690,11 @@ impl<V, I> Drop for Aetna<V, I> {
                     self.allocator
                         .destroy_buffer(ib.buffer, &ib.allocation)
                         .expect("problem with buffer destruction");
+                }
+                if let Some(ib) = &m.indexbuffer {
+                    self.allocator
+                        .destroy_buffer(ib.buffer, &ib.allocation)
+                        .expect("Failed destroy index buffer.")
                 }
             }
             self.pools.cleanup(&self.device);

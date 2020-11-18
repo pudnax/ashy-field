@@ -18,6 +18,7 @@ eyre = "0.6.2"
 color-eyre = "0.5.7"
 ultraviolet = "0.7.5"
 vk-mem = "0.2.2"
+nalgebra = "0.23.0"
 
 [build-dependencies]
 eyre = "0.6.2"
