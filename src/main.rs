@@ -1380,7 +1380,7 @@ impl CameraBuilder {
         self.far = far;
         self
     }
-    // TODO: Do nothing if vector is already normalized
+    // TODO(#2): Do nothing if vector is already normalized
     fn view_direction(mut self, direction: na::Vector3<f32>) -> CameraBuilder {
         self.view_direction = na::Unit::new_normalize(direction);
         self
