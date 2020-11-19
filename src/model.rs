@@ -17,6 +17,8 @@ impl Model<[f32; 3], InstanceData> {
         cube()
     }
 }
+
+// TODO(#5): Find a way(or wait) to restrict generic parameter `I` by size.
 pub struct Model<V, I> {
     vertexdata: Vec<V>,
     indexdata: Vec<u32>,
