@@ -66,7 +66,10 @@ impl Aetna<[f32; 3], InstanceData> {
             physical_device,
             device: logical_device.clone(),
             instance: instance.clone(),
-            ..Default::default()
+            heap_size_limits: None,
+            frame_in_use_count: 0,
+            preferred_large_heap_block_size: 0,
+            flags: vk_mem::AllocatorCreateFlags::NONE,
         };
         let allocator = vk_mem::Allocator::new(&allocator_create_info)?;
 

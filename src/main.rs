@@ -120,7 +120,6 @@ fn main() -> Result<()> {
                     ..
                 } = input
                 {
-                    println!("{:?}", &keycode);
                     match keycode {
                         VirtualKeyCode::Right => {
                             camera.turn_right(0.1 + shift_acceleration);
