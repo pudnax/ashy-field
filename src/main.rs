@@ -331,6 +331,7 @@ fn screenshot<V, I>(aetna: &aetna::Aetna<V, I>) -> Result<(), Box<dyn std::error
         )
     };
 
+    // TODO(#7): Think about unnecessary barriers.
     let barrier = vk::ImageMemoryBarrier::builder()
         .image(destination_image)
         .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
@@ -382,6 +383,7 @@ fn screenshot<V, I>(aetna: &aetna::Aetna<V, I>) -> Result<(), Box<dyn std::error
             &[barrier],
         )
     };
+
     unsafe { aetna.device.end_command_buffer(copybuffer) }?;
     let submit_infos = [vk::SubmitInfo::builder()
         .command_buffers(&[copybuffer])
