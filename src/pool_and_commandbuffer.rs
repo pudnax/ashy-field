@@ -3,7 +3,7 @@ use ash::{version::DeviceV1_0, vk};
 use eyre::*;
 
 pub struct Pools {
-    commandpool_graphics: vk::CommandPool,
+    pub commandpool_graphics: vk::CommandPool,
     commandpool_transfer: vk::CommandPool,
 }
 

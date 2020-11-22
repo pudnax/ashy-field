@@ -35,7 +35,7 @@ pub struct Aetna<V, I> {
     pub swapchain: SwapchainDongXi,
     renderpass: vk::RenderPass,
     pipeline: Pipeline,
-    pools: Pools,
+    pub pools: Pools,
     pub commandbuffers: Vec<vk::CommandBuffer>,
     pub allocator: vk_mem::Allocator,
     pub models: Vec<Model<V, I>>,
