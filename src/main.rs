@@ -26,15 +26,15 @@ fn main() -> Result<()> {
     let eventloop = EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
     let mut aetna = aetna::Aetna::init(window)?;
-    let mut cube = model::Model::<_, model::InstanceData>::sphere(3);
-    cube.insert_visibly(model::InstanceData {
-        modelmatrix: na::Matrix4::new_scaling(0.1).into(),
-        colour: [0.2, 0.4, 1.0],
-    });
-    cube.update_vertexbuffer(&aetna.allocator)?;
-    cube.update_indexbuffer(&aetna.allocator)?;
-    cube.update_instancebuffer(&aetna.allocator)?;
-    aetna.models = vec![cube];
+    let mut sphere = model::Model::<model::VertexData, model::InstanceData>::sphere(3);
+    sphere.insert_visibly(model::InstanceData::from_matrix_and_colour(
+        na::Matrix4::new_scaling(0.5),
+        [0.5, 0.0, 0.2],
+    ));
+    sphere.update_vertexbuffer(&aetna.allocator)?;
+    sphere.update_indexbuffer(&aetna.allocator)?;
+    sphere.update_instancebuffer(&aetna.allocator)?;
+    aetna.models = vec![sphere];
     let mut camera = camera::Camera::builder().build();
 
     let mut shift_acceleration = 0.;

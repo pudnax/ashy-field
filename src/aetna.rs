@@ -5,7 +5,7 @@ use crate::{
         init_device_and_queues, init_instance, init_physical_device_and_properties, QueueFamilies,
         Queues,
     },
-    model::{InstanceData, Model},
+    model::Model,
     pool_and_commandbuffer::{create_commandbuffers, Pools},
     renderpass_and_pipeline::{init_renderpass, Pipeline},
     surface::SurfaceDongXi,
@@ -44,7 +44,7 @@ pub struct Aetna<V, I> {
     descriptor_sets: Vec<vk::DescriptorSet>,
 }
 
-impl Aetna<[f32; 3], InstanceData> {
+impl<V, I> Aetna<V, I> {
     pub fn init(window: winit::window::Window) -> Result<Self> {
         let entry = ash::Entry::new()?;
         let extension_names = ash_window::enumerate_required_extensions(&window)?;
