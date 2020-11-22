@@ -57,14 +57,14 @@ fn main() -> Result<()> {
         // This tells cargo to rerun this script if something in /shaders/ changes.
         println!("cargo:rerun-if-changed={}", shader.src_path.display());
 
-        let compiled = compiler.compile_into_spirv(
+        let compiled_spirv = compiler.compile_into_spirv(
             &shader.src,
             shader.kind,
             &shader.src_path.to_str().unwrap(),
             "main",
             None,
         )?;
-        write(shader.spv_path, compiled.as_binary_u8())?;
+        write(shader.spv_path, compiled_spirv.as_binary_u8())?;
     }
 
     // This tells cargo to rerun this script if something in /res/ changes.

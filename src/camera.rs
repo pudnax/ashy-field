@@ -12,6 +12,7 @@ pub struct Camera {
     far: f32,
     projectionmatrix: na::Matrix4<f32>,
 }
+
 pub struct CameraBuilder {
     position: na::Vector3<f32>,
     view_direction: na::Unit<na::Vector3<f32>>,
@@ -21,6 +22,7 @@ pub struct CameraBuilder {
     near: f32,
     far: f32,
 }
+
 #[allow(dead_code)]
 impl CameraBuilder {
     pub fn build(self) -> Camera {
@@ -52,18 +54,22 @@ impl CameraBuilder {
         cam.update_viewmatrix();
         cam
     }
+
     fn position(mut self, pos: na::Vector3<f32>) -> CameraBuilder {
         self.position = pos;
         self
     }
+
     fn fovy(mut self, fovy: f32) -> CameraBuilder {
         self.fovy = fovy.max(0.01).min(std::f32::consts::PI - 0.01);
         self
     }
+
     fn aspect(mut self, aspect: f32) -> CameraBuilder {
         self.aspect = aspect;
         self
     }
+
     fn near(mut self, near: f32) -> CameraBuilder {
         if near <= 0.0 {
             println!("setting near plane to negative value: {} — you sure?", near);
@@ -88,11 +94,12 @@ impl CameraBuilder {
         self
     }
 }
+
 impl Camera {
     pub fn builder() -> CameraBuilder {
         CameraBuilder {
             position: na::Vector3::new(-3.0, -3.0, -3.0),
-            view_direction: na::Unit::new_normalize(na::Vector3::new(0.0, 1.0, 1.0)),
+            view_direction: na::Unit::new_normalize(na::Vector3::new(1.0, 1.0, 1.0)),
             down_direction: na::Unit::new_normalize(na::Vector3::new(0.0, 1.0, -1.0)),
             fovy: std::f32::consts::FRAC_PI_3,
             aspect: 800.0 / 600.0,
@@ -130,6 +137,7 @@ impl Camera {
         buffer.fill(allocator, &data)?;
         Ok(())
     }
+
     fn update_viewmatrix(&mut self) {
         let right = na::Unit::new_normalize(self.down_direction.cross(&self.view_direction));
         let m = na::Matrix4::new(
@@ -152,21 +160,26 @@ impl Camera {
         );
         self.viewmatrix = self.projectionmatrix * m;
     }
+
     pub fn move_forward(&mut self, distance: f32) {
         self.position += distance * self.view_direction.as_ref();
         self.update_viewmatrix();
     }
+
     pub fn move_backward(&mut self, distance: f32) {
         self.move_forward(-distance);
     }
+
     pub fn turn_right(&mut self, angle: f32) {
         let rotation = na::Rotation3::from_axis_angle(&self.down_direction, angle);
         self.view_direction = rotation * self.view_direction;
         self.update_viewmatrix();
     }
+
     pub fn turn_left(&mut self, angle: f32) {
         self.turn_right(-angle);
     }
+
     pub fn turn_up(&mut self, angle: f32) {
         let right = na::Unit::new_normalize(self.down_direction.cross(&self.view_direction));
         let rotation = na::Rotation3::from_axis_angle(&right, angle);
@@ -174,9 +187,11 @@ impl Camera {
         self.down_direction = rotation * self.down_direction;
         self.update_viewmatrix();
     }
+
     pub fn turn_down(&mut self, angle: f32) {
         self.turn_up(-angle);
     }
+
     pub fn set_aspect(&mut self, aspect: f32) {
         self.aspect = aspect;
         self.update_projectionmatrix();
