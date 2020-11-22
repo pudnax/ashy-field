@@ -208,6 +208,7 @@ fn main() -> Result<()> {
     });
 }
 
+// TODO(#6): Allocate commandbuffers beforehand.
 fn screenshot<V, I>(aetna: &aetna::Aetna<V, I>) -> Result<(), Box<dyn std::error::Error>> {
     let commandbuf_allocate_info = vk::CommandBufferAllocateInfo::builder()
         .command_pool(aetna.pools.commandpool_graphics)
