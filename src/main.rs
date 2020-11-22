@@ -26,66 +26,10 @@ fn main() -> Result<()> {
     let eventloop = EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
     let mut aetna = aetna::Aetna::init(window)?;
-    let mut cube = model::Model::<_, model::InstanceData>::cube();
+    let mut cube = model::Model::<_, model::InstanceData>::sphere(3);
     cube.insert_visibly(model::InstanceData {
-        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.0, 0.0, 0.1))
-            * na::Matrix4::new_scaling(0.1))
-        .into(),
+        modelmatrix: na::Matrix4::new_scaling(0.1).into(),
         colour: [0.2, 0.4, 1.0],
-    });
-    cube.insert_visibly(model::InstanceData {
-        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.05, 0.05, 0.0))
-            * na::Matrix4::new_scaling(0.1))
-        .into(),
-        colour: [1.0, 1.0, 0.2],
-    });
-    for i in 0..10 {
-        for j in 0..10 {
-            cube.insert_visibly(model::InstanceData {
-                modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(
-                    i as f32 * 0.2 - 1.0,
-                    j as f32 * 0.2 - 1.0,
-                    0.5,
-                )) * na::Matrix4::new_scaling(0.03))
-                .into(),
-                colour: [1.0, i as f32 * 0.07, j as f32 * 0.07],
-            });
-            cube.insert_visibly(model::InstanceData {
-                modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(
-                    i as f32 * 0.2 - 1.0,
-                    0.0,
-                    j as f32 * 0.2 - 1.0,
-                )) * na::Matrix4::new_scaling(0.02))
-                .into(),
-                colour: [i as f32 * 0.07, j as f32 * 0.07, 1.0],
-            });
-        }
-    }
-    cube.insert_visibly(model::InstanceData {
-        modelmatrix: (na::Matrix4::from_scaled_axis(na::Vector3::new(0.0, 0.0, 1.4))
-            * na::Matrix4::new_translation(&na::Vector3::new(0.0, 0.5, 0.0))
-            * na::Matrix4::new_scaling(0.1))
-        .into(),
-        colour: [0.0, 0.5, 0.0],
-    });
-    cube.insert_visibly(model::InstanceData {
-        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.5, 0.0, 0.0))
-            * na::Matrix4::new_nonuniform_scaling(&na::Vector3::new(0.5, 0.01, 0.01)))
-        .into(),
-        colour: [1.0, 0.5, 0.5],
-    });
-    cube.insert_visibly(model::InstanceData {
-        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.0, 0.5, 0.0))
-            * na::Matrix4::new_nonuniform_scaling(&na::Vector3::new(0.01, 0.5, 0.01)))
-        .into(),
-        colour: [0.5, 1.0, 0.5],
-    });
-
-    cube.insert_visibly(model::InstanceData {
-        modelmatrix: (na::Matrix4::new_translation(&na::Vector3::new(0.0, 0.0, 0.0))
-            * na::Matrix4::new_nonuniform_scaling(&na::Vector3::new(0.01, 0.01, 0.5)))
-        .into(),
-        colour: [0.5, 0.5, 1.0],
     });
     cube.update_vertexbuffer(&aetna.allocator)?;
     cube.update_indexbuffer(&aetna.allocator)?;
@@ -121,16 +65,16 @@ fn main() -> Result<()> {
                 } = input
                 {
                     match keycode {
-                        VirtualKeyCode::Right => {
+                        VirtualKeyCode::Right | VirtualKeyCode::D => {
                             camera.turn_right(0.1 + shift_acceleration);
                         }
-                        VirtualKeyCode::Left => {
+                        VirtualKeyCode::Left | VirtualKeyCode::A => {
                             camera.turn_left(0.1 + shift_acceleration);
                         }
-                        VirtualKeyCode::Up => {
+                        VirtualKeyCode::Up | VirtualKeyCode::W => {
                             camera.move_forward(0.05 + shift_acceleration);
                         }
-                        VirtualKeyCode::Down => {
+                        VirtualKeyCode::Down | VirtualKeyCode::S => {
                             camera.move_backward(0.05 + shift_acceleration);
                         }
                         VirtualKeyCode::Space => {

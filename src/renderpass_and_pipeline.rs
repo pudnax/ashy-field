@@ -173,7 +173,7 @@ impl Pipeline {
         let rasterizer_info = vk::PipelineRasterizationStateCreateInfo::builder()
             .line_width(1.0)
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
-            .cull_mode(vk::CullModeFlags::NONE)
+            .cull_mode(vk::CullModeFlags::BACK)
             .polygon_mode(vk::PolygonMode::FILL);
         let multisampler_info = vk::PipelineMultisampleStateCreateInfo::builder()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
