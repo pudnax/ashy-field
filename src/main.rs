@@ -26,7 +26,6 @@ fn main() -> Result<()> {
     let eventloop = EventLoop::new();
     let window = winit::window::Window::new(&eventloop)?;
     let mut aetna = aetna::Aetna::init(window)?;
-<<<<<<< HEAD
     let mut sphere = model::Model::<model::VertexData, model::InstanceData>::sphere(3);
     sphere.insert_visibly(model::InstanceData::from_matrix_and_colour(
         na::Matrix4::new_scaling(0.5),

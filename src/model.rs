@@ -30,8 +30,22 @@ fn normalize(v: [f32; 3]) -> [f32; 3] {
     [v[0] / l, v[1] / l, v[2] / l]
 }
 
-=======
->>>>>>> fix_shading
+#[repr(C)]
+pub struct InstanceData {
+    pub modelmatrix: [[f32; 4]; 4],
+    pub inverse_modelmatrix: [[f32; 4]; 4],
+    pub colour: [f32; 3],
+}
+impl InstanceData {
+    pub fn from_matrix_and_colour(modelmatrix: na::Matrix4<f32>, colour: [f32; 3]) -> InstanceData {
+        InstanceData {
+            modelmatrix: modelmatrix.into(),
+            inverse_modelmatrix: modelmatrix.try_inverse().unwrap().into(),
+            colour,
+        }
+    }
+}
+
 #[allow(dead_code)]
 impl Model<[f32; 3], [f32; 6]> {
     fn cube() -> Self {
