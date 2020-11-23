@@ -1,10 +1,12 @@
 #version 450
 
 layout(location=0) in vec4 i_color;
+layout(location=1) in vec3 normal;
 
 layout(location=0) out vec4 o_color;
 
 void main() {
-	o_color = i_color;
+	vec3 direction_to_light = normalize(vec3(-1, -1, 0));
+	o_color = dot(normal, direction_to_light) * i_color;
 }
 
