@@ -205,7 +205,7 @@ impl Pipeline {
             .line_width(1.0)
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .cull_mode(vk::CullModeFlags::BACK)
-            .polygon_mode(vk::PolygonMode::LINE);
+            .polygon_mode(vk::PolygonMode::FILL);
         let multisampler_info = vk::PipelineMultisampleStateCreateInfo::builder()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
         let depth_stencil_info = vk::PipelineDepthStencilStateCreateInfo::builder()
