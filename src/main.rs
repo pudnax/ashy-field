@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     let mut sphere = model::Model::<model::VertexData, model::InstanceData>::sphere(3);
     sphere.insert_visibly(model::InstanceData::from_matrix_and_colour(
         na::Matrix4::new_scaling(0.5),
-        [0.5, 0.0, 0.2],
+        [0.955, 0.638, 0.538],
     ));
     sphere.update_vertexbuffer(&aetna.allocator)?;
     sphere.update_indexbuffer(&aetna.allocator)?;

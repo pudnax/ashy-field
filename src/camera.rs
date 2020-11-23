@@ -1,6 +1,7 @@
 use crate::buffers::Buffer;
 use nalgebra as na;
 
+#[derive(Debug)]
 pub struct Camera {
     viewmatrix: na::Matrix4<f32>,
     position: na::Vector3<f32>,
@@ -98,8 +99,8 @@ impl CameraBuilder {
 impl Camera {
     pub fn builder() -> CameraBuilder {
         CameraBuilder {
-            position: na::Vector3::new(-3.0, -3.0, -3.0),
-            view_direction: na::Unit::new_normalize(na::Vector3::new(1.0, 1.0, 1.0)),
+            position: na::Vector3::new(3.0, 1.33, 1.33),
+            view_direction: na::Unit::new_normalize(na::Vector3::new(-0.81, -0.5, -0.4)),
             down_direction: na::Unit::new_normalize(na::Vector3::new(0.0, 1.0, -1.0)),
             fovy: std::f32::consts::FRAC_PI_3,
             aspect: 800.0 / 600.0,
