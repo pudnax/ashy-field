@@ -99,6 +99,7 @@ impl Pipeline {
             .module(fragmentshader_module)
             .name(&mainfunctionname);
         let shader_stages = vec![vertexshader_stage.build(), fragmentshader_stage.build()];
+
         let vertex_attrib_descs = [
             vk::VertexInputAttributeDescription {
                 binding: 0,
@@ -107,7 +108,7 @@ impl Pipeline {
                 format: vk::Format::R32G32B32_SFLOAT,
             },
             vk::VertexInputAttributeDescription {
-                binding: 1,
+                binding: 0,
                 location: 1,
                 offset: 12,
                 format: vk::Format::R32G32B32_SFLOAT,
@@ -211,7 +212,7 @@ impl Pipeline {
             .depth_test_enable(true)
             .depth_write_enable(true)
             .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL);
-        let colourblend_attachments = [vk::PipelineColorBlendAttachmentState::builder()
+        let colorblend_attachments = [vk::PipelineColorBlendAttachmentState::builder()
             .blend_enable(true)
             .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
             .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
@@ -226,8 +227,8 @@ impl Pipeline {
                     | vk::ColorComponentFlags::A,
             )
             .build()];
-        let colourblend_info =
-            vk::PipelineColorBlendStateCreateInfo::builder().attachments(&colourblend_attachments);
+        let colorblend_info =
+            vk::PipelineColorBlendStateCreateInfo::builder().attachments(&colorblend_attachments);
         let descriptorset_layout_binding_descs = [vk::DescriptorSetLayoutBinding::builder()
             .binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
@@ -251,7 +252,7 @@ impl Pipeline {
             .rasterization_state(&rasterizer_info)
             .multisample_state(&multisampler_info)
             .depth_stencil_state(&depth_stencil_info)
-            .color_blend_state(&colourblend_info)
+            .color_blend_state(&colorblend_info)
             .layout(pipelinelayout)
             .render_pass(*renderpass)
             .subpass(0);

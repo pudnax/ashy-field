@@ -2,23 +2,6 @@ use crate::buffers::Buffer;
 use ash::{version::DeviceV1_0, vk};
 use nalgebra as na;
 
-#[repr(C)]
-pub struct InstanceData {
-    pub modelmatrix: [[f32; 4]; 4],
-    pub inverse_modelmatrix: [[f32; 4]; 4],
-    pub colour: [f32; 3],
-}
-
-impl InstanceData {
-    pub fn from_matrix_and_colour(modelmatrix: na::Matrix4<f32>, colour: [f32; 3]) -> Self {
-        Self {
-            modelmatrix: modelmatrix.into(),
-            inverse_modelmatrix: modelmatrix.try_inverse().unwrap().into(),
-            colour,
-        }
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct VertexData {
@@ -47,6 +30,8 @@ fn normalize(v: [f32; 3]) -> [f32; 3] {
     [v[0] / l, v[1] / l, v[2] / l]
 }
 
+=======
+>>>>>>> fix_shading
 #[allow(dead_code)]
 impl Model<[f32; 3], [f32; 6]> {
     fn cube() -> Self {
@@ -572,26 +557,26 @@ fn icosahedron<I>() -> Model<[f32; 3], I> {
 
         #[rustfmt::skip]
         indexdata: vec![
-            0, 9, 8,
-            0, 8, 4,
-            0, 4, 1,
-            0, 1, 6,
-            0, 6, 9,
-            8, 9, 2,
-            8, 2, 5,
-            8, 5, 4,
-            4, 5, 10,
-            4, 10, 1,
-            1, 10, 11,
-            1, 11, 6,
-            2, 3, 5,
-            2, 7, 3,
-            2, 9, 7,
-            5, 3, 10,
-            3, 11, 10,
-            3, 7, 11,
-            6, 7, 9,
-            6, 11, 7,
+            0, 9, 8, //
+            0, 8, 4, //
+            0, 4, 1, //
+            0, 1, 6, //
+            0, 6, 9, //
+            8, 9, 2, //
+            8, 2, 5, //
+            8, 5, 4, //
+            4, 5, 10, //
+            4, 10, 1, //
+            1, 10, 11, //
+            1, 11, 6, //
+            2, 3, 5, //
+            2, 7, 3, //
+            2, 9, 7, //
+            5, 3, 10, //
+            3, 11, 10, //
+            3, 7, 11, //
+            6, 7, 9, //
+            6, 11, 7, //
         ],
         handle_to_index: std::collections::HashMap::new(),
         handles: Vec::new(),
