@@ -110,7 +110,7 @@ impl Pipeline {
                 binding: 1,
                 location: 1,
                 offset: 12,
-                format: vk::Format::R32G32B32A32_SFLOAT,
+                format: vk::Format::R32G32B32_SFLOAT,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
@@ -134,13 +134,13 @@ impl Pipeline {
                 binding: 1,
                 location: 5,
                 offset: 48,
-                format: vk::Format::R32G32B32_SFLOAT,
+                format: vk::Format::R32G32B32A32_SFLOAT,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
                 location: 6,
                 offset: 64,
-                format: vk::Format::R32G32B32_SFLOAT,
+                format: vk::Format::R32G32B32A32_SFLOAT,
             },
             vk::VertexInputAttributeDescription {
                 binding: 1,
@@ -204,7 +204,7 @@ impl Pipeline {
             .line_width(1.0)
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .cull_mode(vk::CullModeFlags::BACK)
-            .polygon_mode(vk::PolygonMode::FILL);
+            .polygon_mode(vk::PolygonMode::LINE);
         let multisampler_info = vk::PipelineMultisampleStateCreateInfo::builder()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
         let depth_stencil_info = vk::PipelineDepthStencilStateCreateInfo::builder()
