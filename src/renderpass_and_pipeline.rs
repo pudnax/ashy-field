@@ -167,6 +167,18 @@ impl Pipeline {
                 offset: 128,
                 format: vk::Format::R32G32B32_SFLOAT,
             },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 11,
+                offset: 140,
+                format: vk::Format::R32_SFLOAT,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 12,
+                offset: 144,
+                format: vk::Format::R32_SFLOAT,
+            },
         ];
         let vertex_binding_descs = [
             vk::VertexInputBindingDescription {
@@ -176,10 +188,11 @@ impl Pipeline {
             },
             vk::VertexInputBindingDescription {
                 binding: 1,
-                stride: 140,
+                stride: 148,
                 input_rate: vk::VertexInputRate::INSTANCE,
             },
         ];
+
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_attribute_descriptions(&vertex_attrib_descs)
             .vertex_binding_descriptions(&vertex_binding_descs);
@@ -229,18 +242,31 @@ impl Pipeline {
             .build()];
         let colorblend_info =
             vk::PipelineColorBlendStateCreateInfo::builder().attachments(&colorblend_attachments);
-        let descriptorset_layout_binding_descs = [vk::DescriptorSetLayoutBinding::builder()
+
+        let descriptorset_layout_binding_descs0 = [vk::DescriptorSetLayoutBinding::builder()
             .binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::VERTEX)
             .build()];
-        let descriptorset_layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&descriptorset_layout_binding_descs);
-        let descriptorsetlayout = unsafe {
-            logical_device.create_descriptor_set_layout(&descriptorset_layout_info, None)
+        let descriptorset_layout_info0 = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&descriptorset_layout_binding_descs0);
+        let descriptorsetlayout0 = unsafe {
+            logical_device.create_descriptor_set_layout(&descriptorset_layout_info0, None)
         }?;
-        let desclayouts = vec![descriptorsetlayout];
+        let descriptorset_layout_binding_descs1 = [vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+            .build()];
+        let descriptorset_layout_info1 = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&descriptorset_layout_binding_descs1);
+        let descriptorsetlayout1 = unsafe {
+            logical_device.create_descriptor_set_layout(&descriptorset_layout_info1, None)
+        }?;
+        let desclayouts = vec![descriptorsetlayout0, descriptorsetlayout1];
+
         let pipelinelayout_info = vk::PipelineLayoutCreateInfo::builder().set_layouts(&desclayouts);
         let pipelinelayout =
             unsafe { logical_device.create_pipeline_layout(&pipelinelayout_info, None) }?;

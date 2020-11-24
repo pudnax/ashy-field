@@ -99,8 +99,8 @@ impl CameraBuilder {
 impl Camera {
     pub fn builder() -> CameraBuilder {
         CameraBuilder {
-            position: na::Vector3::new(3.0, 1.33, 1.33),
-            view_direction: na::Unit::new_normalize(na::Vector3::new(-0.81, -0.5, -0.4)),
+            position: na::Vector3::new(0.0, -3.0, -3.0),
+            view_direction: na::Unit::new_normalize(na::Vector3::new(0.0, 1.0, 1.0)),
             down_direction: na::Unit::new_normalize(na::Vector3::new(0.0, 1.0, -1.0)),
             fovy: std::f32::consts::FRAC_PI_3,
             aspect: 800.0 / 600.0,

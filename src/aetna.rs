@@ -40,8 +40,10 @@ pub struct Aetna<V, I> {
     pub allocator: vk_mem::Allocator,
     pub models: Vec<Model<V, I>>,
     pub uniformbuffer: Buffer,
+    pub lightbuffer: Buffer,
     descriptor_pool: vk::DescriptorPool,
-    descriptor_sets: Vec<vk::DescriptorSet>,
+    pub descriptor_sets_camera: Vec<vk::DescriptorSet>,
+    pub descriptor_sets_light: Vec<vk::DescriptorSet>,
 }
 
 impl<V, I> Aetna<V, I> {
@@ -100,25 +102,41 @@ impl<V, I> Aetna<V, I> {
             na::Matrix4::identity().into(),
         ];
         uniformbuffer.fill(&allocator, &cameratransforms)?;
-        let pool_sizes = [vk::DescriptorPoolSize {
-            ty: vk::DescriptorType::UNIFORM_BUFFER,
-            descriptor_count: swapchain.amount_of_images,
-        }];
+
+        let mut lightbuffer = Buffer::new(
+            &allocator,
+            8,
+            vk::BufferUsageFlags::STORAGE_BUFFER,
+            vk_mem::MemoryUsage::CpuToGpu,
+        )?;
+        lightbuffer.fill(&allocator, &[0., 0.])?;
+
+        let pool_sizes = [
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: swapchain.amount_of_images,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: swapchain.amount_of_images,
+            },
+        ];
         let descriptor_pool_info = vk::DescriptorPoolCreateInfo::builder()
-            .max_sets(swapchain.amount_of_images)
+            .max_sets(2 * swapchain.amount_of_images)
             .pool_sizes(&pool_sizes);
         let descriptor_pool =
             unsafe { logical_device.create_descriptor_pool(&descriptor_pool_info, None) }?;
 
-        let desc_layouts =
+        let desc_layouts_camera =
             vec![pipeline.descriptor_set_layouts[0]; swapchain.amount_of_images as usize];
-        let descriptor_set_allocate_info = vk::DescriptorSetAllocateInfo::builder()
+        let descriptor_set_allocate_info_camera = vk::DescriptorSetAllocateInfo::builder()
             .descriptor_pool(descriptor_pool)
-            .set_layouts(&desc_layouts);
-        let descriptor_sets =
-            unsafe { logical_device.allocate_descriptor_sets(&descriptor_set_allocate_info) }?;
+            .set_layouts(&desc_layouts_camera);
+        let descriptor_sets_camera = unsafe {
+            logical_device.allocate_descriptor_sets(&descriptor_set_allocate_info_camera)
+        }?;
 
-        for descset in descriptor_sets.iter() {
+        for descset in &descriptor_sets_camera {
             let buffer_infos = [vk::DescriptorBufferInfo {
                 buffer: uniformbuffer.buffer,
                 offset: 0,
@@ -128,6 +146,29 @@ impl<V, I> Aetna<V, I> {
                 .dst_set(*descset)
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&buffer_infos)
+                .build()];
+            unsafe { logical_device.update_descriptor_sets(&desc_sets_write, &[]) };
+        }
+        let desc_layouts_light =
+            vec![pipeline.descriptor_set_layouts[1]; swapchain.amount_of_images as usize];
+        let descriptor_set_allocate_info_light = vk::DescriptorSetAllocateInfo::builder()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&desc_layouts_light);
+        let descriptor_sets_light = unsafe {
+            logical_device.allocate_descriptor_sets(&descriptor_set_allocate_info_light)
+        }?;
+
+        for descset in &descriptor_sets_light {
+            let buffer_infos = [vk::DescriptorBufferInfo {
+                buffer: lightbuffer.buffer,
+                offset: 0,
+                range: 8,
+            }];
+            let desc_sets_write = [vk::WriteDescriptorSet::builder()
+                .dst_set(*descset)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                 .buffer_info(&buffer_infos)
                 .build()];
             unsafe { logical_device.update_descriptor_sets(&desc_sets_write, &[]) };
@@ -153,8 +194,10 @@ impl<V, I> Aetna<V, I> {
             allocator,
             models: vec![],
             uniformbuffer,
+            lightbuffer,
             descriptor_pool,
-            descriptor_sets,
+            descriptor_sets_camera,
+            descriptor_sets_light,
         })
     }
     // TODO(#4): Still have validation errors on validation.
@@ -226,7 +269,10 @@ impl<V, I> Aetna<V, I> {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline.layout,
                 0,
-                &[self.descriptor_sets[index]],
+                &[
+                    self.descriptor_sets_camera[index],
+                    self.descriptor_sets_light[index],
+                ],
                 &[],
             );
             for m in &self.models {
@@ -247,6 +293,9 @@ impl<V, I> Drop for Aetna<V, I> {
                 .expect("Something went wrong while waiting.");
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.allocator
+                .destroy_buffer(self.lightbuffer.buffer, &self.lightbuffer.allocation)
+                .expect("buffer destruction");
             self.allocator
                 .destroy_buffer(self.uniformbuffer.buffer, &self.uniformbuffer.allocation)
                 .expect("Failed destroy uniform buffer");

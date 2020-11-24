@@ -35,13 +35,31 @@ pub struct InstanceData {
     pub modelmatrix: [[f32; 4]; 4],
     pub inverse_modelmatrix: [[f32; 4]; 4],
     pub colour: [f32; 3],
+    pub metallic: f32,
+    pub roughness: f32,
 }
 impl InstanceData {
+    pub fn from_matrix_colour_metallic_and_roughness(
+        modelmatrix: na::Matrix4<f32>,
+        colour: [f32; 3],
+        metallic: f32,
+        roughness: f32,
+    ) -> InstanceData {
+        InstanceData {
+            modelmatrix: modelmatrix.into(),
+            inverse_modelmatrix: modelmatrix.try_inverse().unwrap().into(),
+            colour,
+            metallic,
+            roughness,
+        }
+    }
     pub fn from_matrix_and_colour(modelmatrix: na::Matrix4<f32>, colour: [f32; 3]) -> InstanceData {
         InstanceData {
             modelmatrix: modelmatrix.into(),
             inverse_modelmatrix: modelmatrix.try_inverse().unwrap().into(),
             colour,
+            metallic: 1.0,
+            roughness: 0.5,
         }
     }
 }
