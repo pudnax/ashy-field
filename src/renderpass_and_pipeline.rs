@@ -302,7 +302,7 @@ impl Pipeline {
         })
     }
 
-    pub fn init_tetured(
+    pub fn init_textured(
         logical_device: &ash::Device,
         swapchain: &SwapchainDongXi,
         renderpass: &vk::RenderPass,
